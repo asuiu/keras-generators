@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 from numpy.random import MT19937
-from tensorflow.python.keras.utils.data_utils import Sequence as KerasSequence
+from keras.utils import data_utils
 
 from .dtypes import ScaledTensorSeq, Scaler, TensorSeq
 from .splitters import TrainValTestSpliter
@@ -18,7 +18,7 @@ class NumpyArrayEncoder(JSONEncoder):
         return JSONEncoder.default(self, obj)
 
 
-class XBatchGenerator(KerasSequence):
+class XBatchGenerator(data_utils.Sequence):
     def __init__(self,
                  inputs_map: Dict[str, ScaledTensorSeq],
                  batch_size: int = 128
