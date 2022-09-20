@@ -3,7 +3,7 @@ from pathlib import Path
 
 from setuptools import find_packages
 
-VERSION = '1.0.2'
+VERSION = '1.1.0'
 
 this_file = Path(__file__).resolve()
 readme = this_file.parent / "README.md"
@@ -24,6 +24,8 @@ setup(
         "tensorflow>=2.8.0",
         "scikit-learn>=0.22.2",
         "numpy>=1.20",
+        "pydantic>=1.10.2",
+        "tsx>=0.0.4",
     ],
     extras_require={
         "tests": [],
