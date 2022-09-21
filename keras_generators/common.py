@@ -2,8 +2,10 @@
 # Author: ASU --<andrei.suiu@gmail.com>
 
 import json
+from json import JSONEncoder
 from typing import Any, Callable, Optional, cast
 
+import numpy as np
 from pydantic import BaseModel, Extra
 from tsx import TS
 
@@ -64,3 +66,20 @@ class SerializableImmutableStruct(SerializableStruct):
         allow_mutation = False
         arbitrary_types_allowed = True
         extra = Extra.forbid
+
+
+class NumpyArrayEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return JSONEncoder.default(self, obj)
+
+
+class ImmutableConfig:
+    allow_mutation = False
+    arbitrary_types_allowed = True
+    extra = Extra.forbid
+
+
+class ArbitraryTypes:
+    arbitrary_types_allowed = True

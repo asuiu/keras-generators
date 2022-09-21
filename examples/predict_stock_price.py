@@ -107,12 +107,10 @@ if __name__ == '__main__':
     target_close_prices = close_prices_by_symbol[target_symbol]
     target_df = pd.DataFrame(target_close_prices)
 
-    target_params = TimeseriesTargetsParams(delay=_mp.delay, pred_len=_mp.pred_len, stride=1)
+    target_params = TimeseriesTargetsParams(delay=_mp.delay, pred_len=_mp.pred_len, stride=1, target_idx=_mp.target_symbol_idx)
     price_input_ds = TimeseriesDataSource(name=_mp.seq_input_name, tensors=input_df.values, length=_mp.lookback,
                                           target_params=target_params)
-    targets = price_input_ds.get_targets()
-    targets = targets[:, _mp.target_symbol_idx]  # we get only the target symbol from all the features
-    targets_ds = TensorDataSource(name=_mp.target_name, tensors=targets)
+    targets_ds = price_input_ds.get_targets(target_name=_mp.target_name)
 
     inputs_map = {_mp.seq_input_name: price_input_ds}
     targets_map = {_mp.target_name: targets_ds}
@@ -128,4 +126,5 @@ if __name__ == '__main__':
     model_object = SimpleModelObject(mp=_mp, model=model, input_encoders=encoders, target_encoders=encoders)
     model_dir = SimpleModelObject.construct_model_dir(name=model.name, base_dir="model-data")
     history = model_object.train(train_gen, val_gen, device="/CPU:0", model_dir = model_dir)
-    result_ds = model_object.predict(test_gen, device="/CPU:0")
+    result_ds = model_object.predict(test_gen.get_X_generator(), device="/CPU:0")
+    print(result_ds[:])

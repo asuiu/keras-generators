@@ -184,21 +184,15 @@ class TestTimeseriesDataSource(TestCase):
         na = np.arange(rows * cols).reshape((rows, cols))
         na[:, 1] = 0
         na[:, 0] = np.arange(rows)
-        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2, target_idx=2)
         tds = TimeseriesDataSource("test1", na, length=5, stride=2, target_params=target_params)
-        targets = tds.get_targets()
-        self.assertEqual(targets.shape, (3, 3, 3))
+        targets_ds = tds.get_targets()
+        self.assertEqual(targets_ds.tensors.shape, (3, 3))
         expected_targets = np.array(
-            [[[6, 0, 20],
-              [8, 0, 26],
-              [10, 0, 32]],
-             [[8, 0, 26],
-              [10, 0, 32],
-              [12, 0, 38]],
-             [[10, 0, 32],
-              [12, 0, 38],
-              [14, 0, 44]]])
-        self.assertTrue(np.array_equal(targets, expected_targets))
+            [[20, 26, 32],
+             [26, 32, 38],
+             [32, 38, 44]])
+        self.assertTrue(np.array_equal(targets_ds[:], expected_targets))
 
     def test_split_with_targets_as_orig(self):
         splitter = OrderedSplitter(train=0.6, val=0.2)

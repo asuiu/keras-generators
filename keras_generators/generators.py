@@ -2,15 +2,15 @@ import json
 import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from json import JSONEncoder
 from typing import Dict, Optional, Tuple, List, Union, Sequence, Collection
 
 import numpy as np
 from keras.utils import data_utils
 from numpy.random import MT19937
-from pydantic import PositiveInt, conint, validate_arguments, Extra
+from pydantic import PositiveInt, conint, validate_arguments
 from pydantic.dataclasses import dataclass
 
+from .common import NumpyArrayEncoder, ImmutableConfig, ArbitraryTypes
 from .encoders import DataEncoder
 from .splitters import TrainValTestSpliter, OrderedSplitter
 
@@ -18,23 +18,6 @@ from .splitters import TrainValTestSpliter, OrderedSplitter
 Reason why not use tf.Dataset:
  - when scaling data, scaling factor aren't saved, so it's impossible to scale during inference in production
 """
-
-
-class NumpyArrayEncoder(JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return JSONEncoder.default(self, obj)
-
-
-class ImmutableConfig:
-    allow_mutation = False
-    arbitrary_types_allowed = True
-    extra = Extra.forbid
-
-
-class ArbitraryTypes:
-    arbitrary_types_allowed = True
 
 
 class DataSource(ABC):
@@ -162,6 +145,7 @@ class TimeseriesTargetsParams:
     delay: conint(ge=0) = 0
     pred_len: PositiveInt = 1
     stride: PositiveInt = 1
+    target_idx: int = 0
 
     def get_raw_target_len(self) -> int:
         return self.delay + 1 + (self.pred_len - 1) * self.stride
@@ -244,7 +228,7 @@ class TimeseriesDataSource(TensorDataSource):
         test_ds = self._clone_with_tensors_encoders(test_tensor)
         return train_ds, val_ds, test_ds
 
-    def get_targets(self) -> np.ndarray:
+    def get_targets(self, target_name: str = 'target') -> TensorDataSource:
         """ Get the targets for the given delay and prediction length """
         if self._target_params is None:
             raise ValueError(f'This instance {self.name} of {self.__class__.__name__} was confifured without Targets')
@@ -252,9 +236,10 @@ class TimeseriesDataSource(TensorDataSource):
         pred_w_sz = 1 + (pred_len - 1) * pred_stride
         non_strided_na = np.lib.stride_tricks.sliding_window_view(self.tensors[self.w_sz + delay:],
                                                                   window_shape=(pred_w_sz, self.tensors.shape[1]))
-        strided_na = non_strided_na[::self.stride, 0, ::pred_stride]
-        assert strided_na.shape == (self.size, pred_len, self.tensors.shape[1])
-        return strided_na
+        strided_na = non_strided_na[::self.stride, 0, ::pred_stride, self._target_params.target_idx]
+        assert strided_na.shape == (self.size, pred_len)
+        new_data_source = TensorDataSource(name=target_name, tensors=strided_na, encoders=self.encoders)
+        return new_data_source
 
     def __len__(self) -> int:
         return self.size
