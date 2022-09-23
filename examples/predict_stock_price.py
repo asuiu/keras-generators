@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # Author: ASU --<andrei.suiu@gmail.com>
-
+from glob import glob
+from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
@@ -130,8 +131,11 @@ if __name__ == '__main__':
     model_object = SimpleModelObject(mp=_mp, model=model, encoders=encoders)
     model_dir = SimpleModelObject.construct_model_dir(name=model.name, base_dir="model-data")
     history = model_object.train(train_gen, val_gen, device="/CPU:0", model_dir=model_dir)
-    metrics = model_object.model.evaluate(test_gen)
-    result_ds = model_object.predict(test_gen.get_X_generator(), device="/CPU:0")
+    all_epochs = glob(str(model_dir / "*.hdf5"))
+    last_hdf5 = all_epochs[-1]
+    new_model_obj = SimpleModelObject.from_model_dir(Path(last_hdf5), model_params_cls=_mp.__class__, device="/CPU:0")
+    metrics = new_model_obj.model.evaluate(test_gen)
+    result_ds = new_model_obj.predict(test_gen.get_X_generator(), device="/CPU:0")
     true_pred = np.concatenate((test_gen.targets['target'].decode()[:], result_ds[:]), axis=1)
     print(true_pred)
     print(metrics)
