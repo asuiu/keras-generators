@@ -7,7 +7,8 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from keras_generators.encoders import ScaleEncoder
-from keras_generators.generators import TensorDataSource, DataSet, TimeseriesDataSource, TimeseriesTargetsParams
+from keras_generators.generators import TensorDataSource, DataSet, TimeseriesDataSource, TimeseriesTargetsParams, \
+    TargetTimeseriesDataSource
 from keras_generators.splitters import OrderedSplitter
 
 
@@ -28,6 +29,53 @@ class TestDataSet(TestCase):
         ds1_orig = np.array(train.input_sources['ds1'].decode())
 
         self.assertTrue(np.array_equal(ds1_orig, ds1[:6]))
+
+
+class TestTensorDataSource(TestCase):
+    def test_fit_encode(self):
+        na = np.array(
+            [[[2., 3.],
+              [4., 5.],
+              [6., 7.],
+              [8., 9.],
+              [10., 11.]],
+             [[4., 5.],
+              [6., 7.],
+              [8., 9.],
+              [10., 11.],
+              [12., 13.]]])
+        tds = TensorDataSource("test1", na)
+        encoded = tds.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        true_encoded = encoded[0]
+        expected_encoded = np.array(
+            [[0., 0.],
+             [0.2, 0.2],
+             [0.4, 0.4],
+             [0.6, 0.6],
+             [0.8, 0.8]])
+        np.testing.assert_array_almost_equal(true_encoded, expected_encoded)
+        decoded = encoded.decode()
+        np.testing.assert_array_almost_equal(decoded[0], na[0])
+
+    def test_select_features(self):
+        rows, cols = 5, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        tds = TensorDataSource("test1", na)
+        selected = tds.select_features([0, 2])
+        self.assertEqual((rows, 2), selected.tensors.shape)
+        expected_selected_na = na[:, [0, 2]]
+        self.assertTrue(np.array_equal(expected_selected_na, selected[:]))
+
+    def test_select_features_with_encoders(self):
+        rows, cols = 5, 3
+        na = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        tds = TensorDataSource("test1", na)
+        encoded_tds = tds.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        selected = encoded_tds.select_features([0, 2])
+        self.assertEqual((rows, 2), selected[:].shape)
+        decoded = selected.decode()
+        expected_na = na[:, [0, 2]]
+        np.testing.assert_array_almost_equal(expected_na, decoded[:])
 
 
 class TestTimeseriesDataSource(TestCase):
@@ -235,32 +283,120 @@ class TestTimeseriesDataSource(TestCase):
              [12, 25]])
         self.assertTrue(np.array_equal(test_ds[0], expected_test))
 
+    def test_select_features(self):
+        rows, cols = 10, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 0] = np.arange(rows)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1)
+        selected = tds.select_features([0, 2])
+        expected_first_element = np.array(
+            [[0, 2],
+             [1, 5],
+             [2, 8],
+             [3, 11],
+             [4, 14]])
+        self.assertTrue(np.array_equal(selected[0], expected_first_element))
 
-class TestTensorDataSource(TestCase):
-    def test_fit_encode(self):
-        na = np.array(
-            [[[2., 3.],
-              [4., 5.],
-              [6., 7.],
-              [8., 9.],
-              [10., 11.]],
-             [[4., 5.],
-              [6., 7.],
-              [8., 9.],
-              [10., 11.],
-              [12., 13.]]])
-        tds = TensorDataSource("test1", na)
+    def test_select_features_with_encoders(self):
+        rows, cols = 10, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 0] = np.arange(rows)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1)
         encoded = tds.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
-        true_encoded = encoded[0]
-        expected_encoded = np.array(
-            [[0., 0.],
-             [0.2, 0.2],
-             [0.4, 0.4],
-             [0.6, 0.6],
-             [0.8, 0.8]])
-        np.testing.assert_array_almost_equal(true_encoded, expected_encoded)
-        decoded = encoded.decode()
-        np.testing.assert_array_almost_equal(decoded[0], na[0])
+        selected = encoded.select_features([0, 2])
+        decoded = selected.decode()
+        expected_first_element = na[:5, [0, 2]]
+        self.assertTrue(np.array_equal(decoded[0], expected_first_element))
+
+
+class TestTargetTimeseriesDataSource(TestCase):
+    def test_from_timeseries_nominal(self):
+        rows, cols = 15, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 1] = np.arange(rows)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2, target_idx=1)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1, target_params=target_params)
+        ttds = TargetTimeseriesDataSource.from_timeseries_datasource(tds, name="target1")
+        self.assertEqual(len(tds), len(ttds))
+        all_targets = ttds[:]
+        expected_all_targets = np.array([[6., 8., 10.],
+                                         [7., 9., 11.],
+                                         [8., 10., 12.],
+                                         [9., 11., 13.],
+                                         [10., 12., 14.]])
+        self.assertTrue(np.array_equal(all_targets, expected_all_targets))
+
+    def test_from_timeseries_with_reverse(self):
+        rows, cols = 15, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 1] = np.arange(rows)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2, target_idx=1, reverse=True)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1, target_params=target_params)
+        ttds = TargetTimeseriesDataSource.from_timeseries_datasource(tds, name="target1")
+        self.assertEqual(len(tds), len(ttds))
+        all_targets = ttds[:]
+        expected_all_targets = np.array([[10., 8., 6.],
+                                         [11., 9., 7.],
+                                         [12., 10., 8.],
+                                         [13., 11., 9.],
+                                         [14., 12., 10.]])
+        self.assertTrue(np.array_equal(all_targets, expected_all_targets))
+
+    def test_from_timeseries_with_encoders(self):
+        rows, cols = 15, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 1] = np.arange(rows)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2, target_idx=1, reverse=True)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1, target_params=target_params)
+        encoded = tds.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        ttds = TargetTimeseriesDataSource.from_timeseries_datasource(encoded, name="target1")
+        decoded = ttds.decode()
+        self.assertEqual(len(tds), len(decoded))
+        all_targets = decoded[:]
+        expected_all_targets = np.array([[10., 8., 6.],
+                                         [11., 9., 7.],
+                                         [12., 10., 8.],
+                                         [13., 11., 9.],
+                                         [14., 12., 10.]])
+        self.assertTrue(np.array_equal(all_targets, expected_all_targets))
+
+    def test_decode_predictions(self):
+        rows, cols = 16, 3
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 1] = np.arange(rows)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2, target_idx=1, reverse=True)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1, target_params=target_params)
+        encoded = tds.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        ttds = TargetTimeseriesDataSource.from_timeseries_datasource(encoded, name="target1")
+        predictions = np.array([[0.53333333, 0.4, 0.66666667],
+                                [0.86666667, 0.73333333, 1.],
+                                ])
+        encoded_tensors = TensorDataSource("decoder", predictions, encoders=ttds.get_encoders())
+        decoded_tensors = encoded_tensors.decode()
+
+        expected_decoded = np.array([[8., 6., 10.],
+                                     [13., 11., 15.],
+                                     ])
+        np.testing.assert_array_almost_equal(expected_decoded, decoded_tensors[:])
+
+    def test_split_with_targets_as_orig(self):
+        splitter = OrderedSplitter(train=0.6, val=0.2)
+        rows, cols = 20, 2
+        na = np.arange(rows * cols).reshape((rows, cols))
+        na[:, 0] = np.arange(rows)
+        target_params = TimeseriesTargetsParams(delay=1, pred_len=3, stride=2)
+        tds = TimeseriesDataSource("test1", na, length=5, stride=1, sampling_rate=1, target_params=target_params)
+        ttds = TargetTimeseriesDataSource.from_timeseries_datasource(tds, name="target1")
+        self.assertEqual(len(tds), len(ttds))
+        train_ds, val_ds, test_ds = tds.split(splitter)
+        train_tds, val_tds, test_tds = ttds.split(splitter)
+        self.assertEqual(len(train_ds), len(train_tds))
+        self.assertEqual(len(val_ds), len(val_tds))
+        self.assertEqual(len(test_ds), len(test_tds))
+        np.testing.assert_array_equal(ttds[:6], train_tds[:])
+        np.testing.assert_array_equal(ttds[6:8], val_tds[:])
+        np.testing.assert_array_equal(ttds[8:], test_tds[:])
+
 
 
 if __name__ == '__main__':

@@ -23,13 +23,11 @@ class ModelObject(ABC):
     def __init__(self,
                  mp: ModelParams,
                  model: Model,
-                 input_encoders: Dict[str, List[DataEncoder]],
-                 target_encoders: Dict[str, List[DataEncoder]],
+                 encoders: Dict[str, List[DataEncoder]],
                  ) -> None:
         self.mp = mp
         self.model = model
-        self.input_encoders = input_encoders
-        self.target_encoders = target_encoders
+        self.encoders = encoders
 
     def train(self,
               train_gen: XYBatchGenerator,
@@ -56,7 +54,7 @@ class ModelObject(ABC):
                 ) -> DataSource:
         with tf.device(device):
             res = self.model.predict(x)
-        res_ds = TensorDataSource(name="prediction", tensors=res, encoders=self.target_encoders["target"])
+        res_ds = TensorDataSource(name="prediction", tensors=res, encoders=self.encoders[self.mp.target_name])
         decoded = res_ds.decode()
         return decoded
 
@@ -72,10 +70,9 @@ class SimpleModelObject(ModelObject):
     def __init__(self,
                  mp: ModelParams,
                  model: Model,
-                 input_encoders: Dict[str, List[DataEncoder]],
-                 target_encoders: Dict[str, List[DataEncoder]],
+                 encoders: Dict[str, List[DataEncoder]],
                  ) -> None:
-        super().__init__(mp, model, input_encoders, target_encoders)
+        super().__init__(mp, model, encoders)
 
     def train(self,
               train_gen: XYBatchGenerator,
@@ -114,6 +111,7 @@ class SimpleModelObject(ModelObject):
                     epochs=mp.max_epochs,
                     callbacks=_callbacks,
                     validation_data=val_gen,
+                    steps_per_epoch=mp.steps_per_epoch,
                     verbose=verbose,
                 )
         except Exception:
@@ -129,9 +127,8 @@ class SimpleModelObject(ModelObject):
     def save_scalers(self, model_dir: Path):
         encoders_dir = model_dir / 'encoders'
         encoders_dir.mkdir(parents=True, exist_ok=True)
-        all_encoders = {'input_encoders': self.input_encoders, 'target_encoders': self.target_encoders}
         with gzip.open(encoders_dir / f'encoders.pk.gz', "wb") as f:
-            pickle.dump(all_encoders, f)
+            pickle.dump(self.encoders, f)
 
     @classmethod
     def from_model_dir(cls, hdf5_path: Path, device: str) -> 'ModelObject':

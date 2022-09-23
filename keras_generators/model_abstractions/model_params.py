@@ -30,7 +30,11 @@ class ModelParams(SerializableImmutableStruct):
     val_size_ratio: confloat(ge=0, le=1) = 0.2
     split_policy: Literal["random", "sequential"] = 'random'  # The policy for splitting dataset
 
-    max_epochs: PositiveInt = 100  # Maximum number of epochs to train the model
+    # Maximum number of epochs to train the model
+    max_epochs: PositiveInt = 100
+
+    # Total number of steps (batches of samples) before declaring one epoch finished and starting the next epoch.
+    steps_per_epoch: Optional[int] = None
     early_stop_patience: Optional[
         PositiveInt] = None  # The number of epochs with no improvement after which training will be stopped
     rop_patience: Optional[PositiveInt] = None  # Reduce on plateau patience
@@ -38,6 +42,9 @@ class ModelParams(SerializableImmutableStruct):
 
     loss: Literal['mse'] = 'mse'
     metrics: List[Literal['mse']] = ['mse']
+
+    input_name: str = "input"  # Name of the main input layer
+    target_name: str = "target"  # Name of the main target layer
 
     class Config:
         extra = Extra.forbid

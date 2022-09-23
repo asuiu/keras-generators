@@ -65,6 +65,15 @@ class DataSource(ABC):
     def as_numpy(self) -> np.ndarray:
         return np.array(self)
 
+    @abstractmethod
+    def select_features(self, features: Collection[int]) -> 'DataSource':
+        """
+        Creates a new DataSource with the subset of the selected features.
+        It's responsibility is to adapt the encoders as well to work on new DataSource properly.
+        Example: `small_ds = ds.select_features([0, 1, 2])`
+        """
+        raise NotImplementedError()
+
 
 class TensorDataSource(DataSource):
     """
@@ -92,14 +101,16 @@ class TensorDataSource(DataSource):
     @validate_arguments(config=ArbitraryTypes)
     def _clone_with_tensors_encoders(self,
                                      tensors: np.ndarray,
-                                     encoders: Optional[List[DataEncoder]] = None
-                                     ) -> 'DataSource':
+                                     encoders: Optional[List[DataEncoder]] = None,
+                                     name: Optional[str] = None
+                                     ) -> DataSource:
         if encoders is None:
             encoders = self.encoders
-        return self.__class__(name=self.name, tensors=tensors, encoders=encoders)
+        name = name or self.name
+        return self.__class__(name=name, tensors=tensors, encoders=encoders)
 
     @validate_arguments(config=ArbitraryTypes)
-    def fit_encode(self, encoders: List[DataEncoder]) -> 'DataSource':
+    def fit_encode(self, encoders: List[DataEncoder]) -> DataSource:
         if not encoders:
             return self
         encoded_na = self.tensors
@@ -110,7 +121,7 @@ class TensorDataSource(DataSource):
         return self._clone_with_tensors_encoders(encoded_na, encoders)
 
     @validate_arguments(config=ArbitraryTypes)
-    def encode(self, encoders: List[DataEncoder]) -> 'DataSource':
+    def encode(self, encoders: List[DataEncoder]) -> DataSource:
         if not encoders:
             return self
         encoded_na = self.tensors
@@ -120,7 +131,7 @@ class TensorDataSource(DataSource):
             encoders = self.encoders + encoders
         return self._clone_with_tensors_encoders(encoded_na, encoders)
 
-    def decode(self) -> 'DataSource':
+    def decode(self) -> DataSource:
         if self.encoders is None:
             return self
         decoded_na = self.tensors
@@ -136,8 +147,15 @@ class TensorDataSource(DataSource):
             return self.tensors[item]
         raise ValueError(f'Unsupported type: {type(item)}')
 
+    @validate_arguments(config=ArbitraryTypes)
     def get_by_idx_set(self, index_set: Collection[int]) -> np.ndarray:
         return self.tensors[index_set]
+
+    @validate_arguments(config=ArbitraryTypes)
+    def select_features(self, features: Collection[int], name: Optional[str] = None) -> DataSource:
+        tensors = self.tensors[:, features]
+        new_encoders = [encoder.select_features(features) for encoder in self.encoders]
+        return self._clone_with_tensors_encoders(tensors, new_encoders, name)
 
 
 @dataclass(config=ImmutableConfig)
@@ -146,6 +164,7 @@ class TimeseriesTargetsParams:
     pred_len: PositiveInt = 1
     stride: PositiveInt = 1
     target_idx: int = 0
+    reverse: bool = False
 
     def get_raw_target_len(self) -> int:
         return self.delay + 1 + (self.pred_len - 1) * self.stride
@@ -193,11 +212,13 @@ class TimeseriesDataSource(TensorDataSource):
     @validate_arguments(config=ArbitraryTypes)
     def _clone_with_tensors_encoders(self,
                                      tensors: np.ndarray,
-                                     encoders: Optional[List[DataEncoder]] = None
+                                     encoders: Optional[List[DataEncoder]] = None,
+                                     name: Optional[str] = None
                                      ) -> 'DataSource':
         if encoders is None:
             encoders = self.encoders
-        return self.__class__(name=self.name, tensors=tensors, length=self.length, sampling_rate=self.sampling_rate,
+        name = name or self.name
+        return self.__class__(name=name, tensors=tensors, length=self.length, sampling_rate=self.sampling_rate,
                               stride=self.stride, reverse=self.reverse, encoders=encoders,
                               target_params=self._target_params)
 
@@ -237,6 +258,8 @@ class TimeseriesDataSource(TensorDataSource):
         non_strided_na = np.lib.stride_tricks.sliding_window_view(self.tensors[self.w_sz + delay:],
                                                                   window_shape=(pred_w_sz, self.tensors.shape[1]))
         strided_na = non_strided_na[::self.stride, 0, ::pred_stride, self._target_params.target_idx]
+        if self._target_params.reverse:
+            strided_na = strided_na[:, ::-1]
         assert strided_na.shape == (self.size, pred_len)
         new_data_source = TensorDataSource(name=target_name, tensors=strided_na, encoders=self.encoders)
         return new_data_source
@@ -286,6 +309,63 @@ class TimeseriesDataSource(TensorDataSource):
         for batch_idx, inst_idx in enumerate(index_set):
             instances[batch_idx] = self._get_one_instance(inst_idx)
         return instances
+
+
+class TargetTimeseriesDataSource(TimeseriesDataSource):
+
+    @classmethod
+    @validate_arguments(config=ArbitraryTypes)
+    def from_timeseries_datasource(cls,
+                                   ds: TimeseriesDataSource,
+                                   name: Optional[str] = None
+                                   ) -> 'TimeseriesDataSource':
+        assert ds._target_params is not None, "Can't create target datasource without target parameters"
+        name = name or ds.name
+        idx_arr = np.array([ds._target_params.target_idx])
+        new_ds = ds.select_features(idx_arr, name)
+        new_inst = cls(name=name, tensors=new_ds.tensors,
+                   length=new_ds.length,
+                   sampling_rate=new_ds.sampling_rate,
+                   stride=new_ds.stride,
+                   reverse=new_ds.reverse,
+                   encoders=new_ds.encoders,
+                   target_params=new_ds._target_params)
+        assert len(ds) == len(new_inst)
+        return new_inst
+
+    @validate_arguments
+    def _get_target_window_by_instance_idx(self, instance_idx: int) -> Tuple[int, int]:
+        delay, pred_len, pred_stride = self._target_params.delay, self._target_params.pred_len, self._target_params.stride
+        instance_idx = self._convert_negative_index(instance_idx)
+        input_start, input_end = super()._get_window_by_instance_idx(instance_idx)
+        start_idx = input_end + delay
+        pred_w_sz = 1 + (pred_len - 1) * pred_stride
+
+        assert start_idx + pred_w_sz <= self.tensors.shape[0], f'Corrupted data in generator at index {instance_idx}'
+        end_idx = start_idx + pred_w_sz
+        return start_idx, end_idx
+
+    @validate_arguments
+    def _get_one_instance(self, index: int) -> np.ndarray:
+        start, end = self._get_target_window_by_instance_idx(index)
+        stride = self._target_params.stride
+        instance = self.tensors[start:end:stride, 0]
+        if self._target_params.reverse:
+            return instance[::-1]
+        assert instance.shape == (self._target_params.pred_len,)
+        return instance
+
+    @validate_arguments(config=ArbitraryTypes)
+    def get_by_idx_set(self, index_set: Collection[int]) -> np.ndarray:
+        pred_len = self._target_params.pred_len
+        instances = np.empty((len(index_set), pred_len))
+        instances.fill(np.nan)
+        for batch_idx, inst_idx in enumerate(index_set):
+            instances[batch_idx] = self._get_one_instance(inst_idx)
+        return instances
+
+    def select_features(self, features: Collection[int], name: Optional[str] = None) -> DataSource:
+        raise NotImplementedError("Can't implement select features on a target DataSource")
 
 
 class DataSet():
