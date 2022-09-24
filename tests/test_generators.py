@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from keras_generators.encoders import ScaleEncoder
 from keras_generators.generators import TensorDataSource, DataSet, TimeseriesDataSource, TimeseriesTargetsParams, \
-    TargetTimeseriesDataSource
+    TargetTimeseriesDataSource, CompoundDataSource
 from keras_generators.splitters import OrderedSplitter
 
 
@@ -397,6 +397,68 @@ class TestTargetTimeseriesDataSource(TestCase):
         np.testing.assert_array_equal(ttds[6:8], val_tds[:])
         np.testing.assert_array_equal(ttds[8:], test_tds[:])
 
+
+class TestCompoundDataSource(TestCase):
+    def test_nominal(self):
+        rows, cols = 5, 3
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TensorDataSource("test1", na1)
+        tds2 = TensorDataSource("test2", na2)
+        tds_comp = tds1 + tds2
+        self.assertEqual(len(tds_comp), len(tds1))
+        i1, i2 = tds1[0], tds2[0]
+        i_comp = np.concatenate((i1, i2))
+        self.assertTrue(np.array_equal(tds_comp[0], i_comp))
+
+    def test_with_timeseries(self):
+        rows, cols = 10, 3
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TimeseriesDataSource("test1", na1, length=5)
+        tds2 = TimeseriesDataSource("test2", na2, length=5)
+        tds_comp = tds1 + tds2
+        self.assertEqual(len(tds_comp), len(tds1))
+        expected_el = np.array([[0., 1., 2., 0.5, 1.5, 2.5],
+                                [3., 4., 5., 3.5, 4.5, 5.5],
+                                [6., 7., 8., 6.5, 7.5, 8.5],
+                                [9., 10., 11., 9.5, 10.5, 11.5],
+                                [12., 13., 14., 12.5, 13.5, 14.5]])
+        self.assertTrue(np.array_equal(expected_el, tds_comp[0]))
+
+    def test_as_numpy(self):
+        rows, cols = 5, 2
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TimeseriesDataSource("test1", na1, length=3)
+        tds2 = TimeseriesDataSource("test2", na2, length=3)
+        tds_comp = tds1 + tds2
+        self.assertEqual(len(tds_comp), len(tds1))
+        expected_el = np.array([[0., 1., 0.5, 1.5],
+                                [2., 3., 2.5, 3.5],
+                                [4., 5., 4.5, 5.5],
+                                [6., 7., 6.5, 7.5],
+                                [8., 9., 8.5, 9.5]])
+        self.assertTrue(np.array_equal(expected_el, tds_comp.as_numpy()))
+
+    def test_encode_decode(self):
+        rows, cols = 5, 2
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TimeseriesDataSource("test1", na1, length=3)
+        tds2 = TimeseriesDataSource("test2", na2, length=3)
+        tds_comp: CompoundDataSource = tds1 + tds2
+        encoded = tds_comp.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        tds1_encoded = tds1.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        tds2_encoded = tds2.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        expected_el = np.concatenate((tds1_encoded[0], tds2_encoded[0]), axis=-1)
+        np.testing.assert_array_almost_equal(expected_el, encoded[0])
+        tds_comp_decoded = encoded.decode()
+        np.testing.assert_array_almost_equal(tds_comp[:], tds_comp_decoded[:])
 
 
 if __name__ == '__main__':

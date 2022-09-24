@@ -13,9 +13,9 @@ import tensorflow as tf
 from keras import Model
 from keras.callbacks import Callback, History, ReduceLROnPlateau, EarlyStopping, ModelCheckpoint, CSVLogger
 
-from keras_generators.encoders import DataEncoder
-from keras_generators.generators import XYBatchGenerator, XBatchGenerator, TensorDataSource, DataSource
-from keras_generators.model_abstractions.model_params import ModelParams
+from ..encoders import DataEncoder
+from ..generators import XYBatchGenerator, XBatchGenerator, TensorDataSource, DataSource
+from ..model_abstractions.model_params import ModelParams
 
 
 class ModelObject(ABC):

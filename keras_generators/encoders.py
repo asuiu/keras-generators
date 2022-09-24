@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Union, Collection
 
 import numpy as np
+import sklearn
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, MaxAbsScaler, RobustScaler, Binarizer, PowerTransformer
 
 Scaler = Union[StandardScaler, MinMaxScaler, MaxAbsScaler, RobustScaler, Binarizer, PowerTransformer]
@@ -23,12 +24,16 @@ class DataEncoder(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def select_features(self, features_idxs:Collection[int]) -> 'DataEncoder':
+    def select_features(self, features_idxs: Collection[int]) -> 'DataEncoder':
         """
         Creates a new DataEncoder with the subset of the selected features.
         It's responsibility is to adapt the encoder to the sub-set of features.
         Example: `small_ds = ds.select_features([0, 1, 2])`
         """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def clone(self) -> 'DataEncoder':
         raise NotImplementedError()
 
 
@@ -68,7 +73,7 @@ class ScaleEncoder(DataEncoder):
         transformer = self.scaler.inverse_transform
         return self._transform(data, transformer)
 
-    def select_features(self, features_idxs:Collection[int]) -> 'DataEncoder':
+    def select_features(self, features_idxs: Collection[int]) -> 'ScaleEncoder':
         if isinstance(self.scaler, StandardScaler):
             scale_ = self.scaler.scale_[features_idxs]
             mean_ = self.scaler.mean_[features_idxs]
@@ -97,3 +102,6 @@ class ScaleEncoder(DataEncoder):
             return ScaleEncoder(new_scaler, self.column_wise)
         raise NotImplementedError()
 
+    def clone(self) -> 'ScaleEncoder':
+        new_scaler = sklearn.base.clone(self.scaler)
+        return self.__class__(scaler=new_scaler, column_wise=self.column_wise)

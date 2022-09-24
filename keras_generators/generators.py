@@ -32,7 +32,7 @@ class DataSource(ABC):
 
     def __add__(self, other: 'DataSource') -> 'DataSource':
         assert isinstance(other, self.__class__), f'{type(other)} is not a {self.__class__.__name__}'
-        raise NotImplementedError()
+        return CompoundDataSource(self.name, [self, other])
 
     @abstractmethod
     def fit_encode(self, encoders: List[DataEncoder]) -> 'DataSource':
@@ -57,9 +57,10 @@ class DataSource(ABC):
     def __getitem__(self, item: Union[int, slice, Sequence[int], np.ndarray]) -> np.ndarray:
         raise NotImplementedError()
 
-    @abstractmethod
-    def get_by_idx_set(self, index_set: Collection[int]) -> np.ndarray:
-        raise NotImplementedError()
+    @validate_arguments(config=ArbitraryTypes)
+    def get_by_idx_set(self, index_set: Collection[Union[int, np.integer]]) -> np.ndarray:
+        nas = tuple(self.__getitem__(i) for i in index_set)
+        return np.array(nas)
 
     @abstractmethod
     def as_numpy(self) -> np.ndarray:
@@ -73,6 +74,60 @@ class DataSource(ABC):
         Example: `small_ds = ds.select_features([0, 1, 2])`
         """
         raise NotImplementedError()
+
+
+class CompoundDataSource(DataSource):
+
+    def __init__(self, name: str, data_sources: Sequence[DataSource]):
+        assert len(data_sources) >= 2, 'Has to be at least two datasources'
+        super().__init__(name, encoders=None)
+        self._data_sources = data_sources
+        self.sz = len(data_sources[0])
+        for ds in data_sources:
+            assert self.sz == len(ds), f'All data sources must have the same length. {self.sz} != {len(ds)}'
+
+    def split(self, splitter: TrainValTestSpliter) -> Tuple[
+        'CompoundDataSource', 'CompoundDataSource', 'CompoundDataSource']:
+        train_dss, val_dss, test_dss = [], [], []
+        for ds in self._data_sources:
+            train, val, test = ds.split(splitter)
+            train_dss.append(train)
+            val_dss.append(val)
+            test_dss.append(test)
+        train_ds = self.__class__(self.name, train_dss)
+        val_ds = self.__class__(self.name, val_dss)
+        test_ds = self.__class__(self.name, test_dss)
+        return train_ds, val_ds, test_ds
+
+    def fit_encode(self, encoders: List[DataEncoder]) -> 'CompoundDataSource':
+        cloned_encoders = [[enc.clone() for enc in encoders] for i in range(len(self._data_sources))]
+        encoded_dss = [ds.fit_encode(cloned_encoders[i]) for i, ds in enumerate(self._data_sources)]
+        return self.__class__(self.name, encoded_dss)
+
+    def encode(self, encoders: List[DataEncoder]) -> 'CompoundDataSource':
+        encoded_dss = [ds.encode(encoders) for ds in self._data_sources]
+        return self.__class__(self.name, encoded_dss)
+
+    def decode(self) -> 'CompoundDataSource':
+        decoded_dss = [ds.decode() for ds in self._data_sources]
+        return self.__class__(self.name, decoded_dss)
+
+    def __len__(self) -> int:
+        return self.sz
+
+    def __getitem__(self, item: Union[int, slice, Sequence[int], np.ndarray]) -> np.ndarray:
+        instances = tuple(ds[item] for ds in self._data_sources)
+        na = np.concatenate(instances, axis=-1)
+        return na
+
+    def as_numpy(self) -> np.ndarray:
+        tensors = tuple(ds.as_numpy() for ds in self._data_sources)
+        na = np.concatenate(tensors, axis=-1)
+        return na
+
+    def select_features(self, features: Collection[int]) -> 'DataSource':
+        raise NotImplementedError(
+            "Can't select features from CompoundDataSource - too ambigue. Raise a ticket on Github if you need this.")
 
 
 # ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
@@ -301,7 +356,7 @@ class TimeseriesDataSource(TensorDataSource):
         return instance
 
     def __getitem__(self, item: Union[int, slice, Collection[int]]) -> np.ndarray:
-        if isinstance(item, int):
+        if isinstance(item, (int, np.integer)):
             return self._get_one_instance(item)
         elif isinstance(item, slice):
             start = item.start or 0
@@ -310,13 +365,11 @@ class TimeseriesDataSource(TensorDataSource):
             _range = np.arange(start, stop, step)
             instances = self.get_by_idx_set(_range)
             return instances
+        raise NotImplementedError()
 
     def get_by_idx_set(self, index_set: Collection[int]) -> np.ndarray:
-        instances = np.empty((len(index_set), self.length, self.tensors.shape[-1],))
-        instances.fill(np.nan)
-        for batch_idx, inst_idx in enumerate(index_set):
-            instances[batch_idx] = self._get_one_instance(inst_idx)
-        return instances
+        return DataSource.get_by_idx_set(self, index_set)
+
 
 # ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
 TargetTimeseriesDataSource = ForwardRef('TargetTimeseriesDataSource')

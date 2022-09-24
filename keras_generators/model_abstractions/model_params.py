@@ -8,7 +8,7 @@ from typing import Optional, List
 from pydantic import constr, conint, PositiveInt, confloat, Extra
 from typing_extensions import Literal
 
-from keras_generators.common import SerializableImmutableStruct
+from ..common import SerializableImmutableStruct
 
 
 class ModelParams(SerializableImmutableStruct):
