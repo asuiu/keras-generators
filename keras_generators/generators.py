@@ -2,7 +2,7 @@ import json
 import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Dict, Optional, Tuple, List, Union, Sequence, Collection
+from typing import Dict, Optional, Tuple, List, Union, Sequence, Collection, ForwardRef
 
 import numpy as np
 from keras.utils import data_utils
@@ -75,6 +75,10 @@ class DataSource(ABC):
         raise NotImplementedError()
 
 
+# ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
+TensorDataSource = ForwardRef('TensorDataSource')
+
+
 class TensorDataSource(DataSource):
     """
     Note that vectors of 1D features (i.e. multi-variate timeseries) are represented as (n_batch, n_timesteps, n_features)
@@ -94,7 +98,7 @@ class TensorDataSource(DataSource):
         return self.tensors
 
     @validate_arguments(config=ArbitraryTypes)
-    def split(self, splitter: TrainValTestSpliter) -> Tuple['DataSource', 'DataSource', 'DataSource']:
+    def split(self, splitter: TrainValTestSpliter) -> Tuple['TensorDataSource', 'TensorDataSource', 'TensorDataSource']:
         train, val, test = splitter.split(self.tensors)
         return self.__class__(self.name, train), self.__class__(self.name, val), self.__class__(self.name, test)
 
@@ -103,14 +107,14 @@ class TensorDataSource(DataSource):
                                      tensors: np.ndarray,
                                      encoders: Optional[List[DataEncoder]] = None,
                                      name: Optional[str] = None
-                                     ) -> DataSource:
+                                     ) -> 'TensorDataSource':
         if encoders is None:
             encoders = self.encoders
         name = name or self.name
         return self.__class__(name=name, tensors=tensors, encoders=encoders)
 
     @validate_arguments(config=ArbitraryTypes)
-    def fit_encode(self, encoders: List[DataEncoder]) -> DataSource:
+    def fit_encode(self, encoders: List[DataEncoder]) -> 'TensorDataSource':
         if not encoders:
             return self
         encoded_na = self.tensors
@@ -121,7 +125,7 @@ class TensorDataSource(DataSource):
         return self._clone_with_tensors_encoders(encoded_na, encoders)
 
     @validate_arguments(config=ArbitraryTypes)
-    def encode(self, encoders: List[DataEncoder]) -> DataSource:
+    def encode(self, encoders: List[DataEncoder]) -> 'TensorDataSource':
         if not encoders:
             return self
         encoded_na = self.tensors
@@ -131,7 +135,7 @@ class TensorDataSource(DataSource):
             encoders = self.encoders + encoders
         return self._clone_with_tensors_encoders(encoded_na, encoders)
 
-    def decode(self) -> DataSource:
+    def decode(self) -> 'TensorDataSource':
         if self.encoders is None:
             return self
         decoded_na = self.tensors
@@ -152,7 +156,7 @@ class TensorDataSource(DataSource):
         return self.tensors[index_set]
 
     @validate_arguments(config=ArbitraryTypes)
-    def select_features(self, features: Collection[int], name: Optional[str] = None) -> DataSource:
+    def select_features(self, features: Collection[int], name: Optional[str] = None) -> 'TensorDataSource':
         tensors = self.tensors[:, features]
         new_encoders = [encoder.select_features(features) for encoder in self.encoders]
         return self._clone_with_tensors_encoders(tensors, new_encoders, name)
@@ -168,6 +172,9 @@ class TimeseriesTargetsParams:
 
     def get_raw_target_len(self) -> int:
         return self.delay + 1 + (self.pred_len - 1) * self.stride
+
+# ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
+TimeseriesDataSource = ForwardRef('TimeseriesDataSource')
 
 
 class TimeseriesDataSource(TensorDataSource):
@@ -214,7 +221,7 @@ class TimeseriesDataSource(TensorDataSource):
                                      tensors: np.ndarray,
                                      encoders: Optional[List[DataEncoder]] = None,
                                      name: Optional[str] = None
-                                     ) -> 'DataSource':
+                                     ) -> 'TimeseriesDataSource':
         if encoders is None:
             encoders = self.encoders
         name = name or self.name
@@ -223,7 +230,8 @@ class TimeseriesDataSource(TensorDataSource):
                               target_params=self._target_params)
 
     @validate_arguments(config=ArbitraryTypes)
-    def split(self, splitter: TrainValTestSpliter) -> Tuple['DataSource', 'DataSource', 'DataSource']:
+    def split(self, splitter: TrainValTestSpliter) -> Tuple[
+        'TimeseriesDataSource', 'TimeseriesDataSource', 'TimeseriesDataSource']:
         """ For the moment it supports only OrderedSplitter, as this it TimeSeries """
         assert isinstance(splitter, OrderedSplitter)
         instance_idxes = np.arange(self.size)
@@ -310,6 +318,9 @@ class TimeseriesDataSource(TensorDataSource):
             instances[batch_idx] = self._get_one_instance(inst_idx)
         return instances
 
+# ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
+TargetTimeseriesDataSource = ForwardRef('TargetTimeseriesDataSource')
+
 
 class TargetTimeseriesDataSource(TimeseriesDataSource):
 
@@ -318,18 +329,18 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
     def from_timeseries_datasource(cls,
                                    ds: TimeseriesDataSource,
                                    name: Optional[str] = None
-                                   ) -> 'TimeseriesDataSource':
+                                   ) -> 'TargetTimeseriesDataSource':
         assert ds._target_params is not None, "Can't create target datasource without target parameters"
         name = name or ds.name
         idx_arr = np.array([ds._target_params.target_idx])
         new_ds = ds.select_features(idx_arr, name)
         new_inst = cls(name=name, tensors=new_ds.tensors,
-                   length=new_ds.length,
-                   sampling_rate=new_ds.sampling_rate,
-                   stride=new_ds.stride,
-                   reverse=new_ds.reverse,
-                   encoders=new_ds.encoders,
-                   target_params=new_ds._target_params)
+                       length=new_ds.length,
+                       sampling_rate=new_ds.sampling_rate,
+                       stride=new_ds.stride,
+                       reverse=new_ds.reverse,
+                       encoders=new_ds.encoders,
+                       target_params=new_ds._target_params)
         assert len(ds) == len(new_inst)
         return new_inst
 
@@ -367,6 +378,9 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
     def select_features(self, features: Collection[int], name: Optional[str] = None) -> DataSource:
         raise NotImplementedError("Can't implement select features on a target DataSource")
 
+# ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
+DataSet = ForwardRef('Foo')
+
 
 class DataSet():
     @validate_arguments(config=ArbitraryTypes)
@@ -395,6 +409,11 @@ class DataSet():
             test_input_sources[name] = test.encode(encoded_train.get_encoders())
         return train_input_sources, val_input_sources, test_input_sources
 
+    @validate_arguments(config=ArbitraryTypes)
+    def split(self, splitter: TrainValTestSpliter) -> Tuple['DataSet', 'DataSet', 'DataSet']:
+        return self.split_encode(splitter, None)
+
+    @validate_arguments(config=ArbitraryTypes)
     def split_encode(self, splitter: TrainValTestSpliter, encoders: Optional[Dict[str, List[DataEncoder]]]) \
             -> Tuple['DataSet', 'DataSet', 'DataSet']:
         """
@@ -413,6 +432,11 @@ class DataSet():
         val_ds = DataSet(val_inputs, val_targets)
         test_ds = DataSet(test_inputs, test_targets)
         return train_ds, val_ds, test_ds
+
+    def get_encoders(self) -> Dict[str, List[DataEncoder]]:
+        both_sources = (self.input_sources, self.target_sources)
+        all_encoders = {name: source.get_encoders() for sources in both_sources for name, source in sources.items()}
+        return all_encoders
 
 
 class XBatchGenerator(data_utils.Sequence):

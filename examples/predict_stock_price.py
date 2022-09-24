@@ -107,28 +107,24 @@ if __name__ == '__main__':
 
     input_df = pd.DataFrame(close_prices_by_symbol)
     target_symbol = _mp.input_symbols[_mp.target_symbol_idx]
-    target_close_prices = close_prices_by_symbol[target_symbol]
-    target_df = pd.DataFrame(target_close_prices)
 
-    target_params = TimeseriesTargetsParams(delay=_mp.delay, pred_len=_mp.pred_len, stride=1,
-                                            target_idx=_mp.target_symbol_idx)
     price_input_ds = TimeseriesDataSource(name=_mp.seq_input_name, tensors=input_df.values, length=_mp.lookback,
-                                          target_params=target_params)
-    targets_ds = TargetTimeseriesDataSource.from_timeseries_datasource(price_input_ds, name=_mp.target_name)
+                                          target_params=TimeseriesTargetsParams(delay=_mp.delay,
+                                                                                pred_len=_mp.pred_len,
+                                                                                stride=1,
+                                                                                target_idx=_mp.target_symbol_idx)
+                                          )
+    encoded_input_ds = price_input_ds.fit_encode([ScaleEncoder(StandardScaler())])
+    targets_ds = TargetTimeseriesDataSource.from_timeseries_datasource(encoded_input_ds, name=_mp.target_name)
 
-    inputs_map = {_mp.seq_input_name: price_input_ds}
-    targets_map = {_mp.target_name: targets_ds}
-    dataset = DataSet(input_sources=inputs_map, target_sources=targets_map)
-    splitter = OrderedSplitter(train=0.6, val=0.2)
-    encoders = {_mp.seq_input_name: [ScaleEncoder(scaler=StandardScaler())],
-                _mp.target_name:    [ScaleEncoder(scaler=StandardScaler())]}
-    train_ds, val_ds, test_ds = dataset.split_encode(splitter=splitter, encoders=encoders)
+    dataset = DataSet(input_sources={_mp.seq_input_name: encoded_input_ds}, target_sources={_mp.target_name: targets_ds})
+    train_ds, val_ds, test_ds = dataset.split(splitter=OrderedSplitter(train=0.6, val=0.2))
     train_gen = XYBatchGenerator(train_ds.input_sources, train_ds.target_sources, batch_size=_mp.batch_size)
     val_gen = XYBatchGenerator(val_ds.input_sources, val_ds.target_sources, batch_size=_mp.val_batch_size)
     test_gen = XYBatchGenerator(test_ds.input_sources, test_ds.target_sources, batch_size=_mp.val_batch_size)
 
     model = simple_lstm_model_factory(_mp)
-    model_object = SimpleModelObject(mp=_mp, model=model, encoders=encoders)
+    model_object = SimpleModelObject(mp=_mp, model=model, encoders=train_ds.get_encoders())
     model_dir = SimpleModelObject.construct_model_dir(name=model.name, base_dir="model-data")
     history = model_object.train(train_gen, val_gen, device="/CPU:0", model_dir=model_dir)
     all_epochs = glob(str(model_dir / "*.hdf5"))
