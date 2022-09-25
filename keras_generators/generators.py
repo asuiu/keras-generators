@@ -11,7 +11,7 @@ from pydantic import PositiveInt, conint, validate_arguments
 from pydantic.dataclasses import dataclass
 
 from .common import NumpyArrayEncoder, ImmutableConfig, ArbitraryTypes
-from .encoders import DataEncoder
+from .encoders import DataEncoder, ChainedDataEncoder, CompoundDataEncoder
 from .splitters import TrainValTestSpliter, OrderedSplitter
 
 """
@@ -75,12 +75,18 @@ class DataSource(ABC):
         """
         raise NotImplementedError()
 
+    def get_instance_shape(self) -> Tuple[int, ...]:
+        return self[0].shape
+
 
 class CompoundDataSource(DataSource):
 
     def __init__(self, name: str, data_sources: Sequence[DataSource]):
         assert len(data_sources) >= 2, 'Has to be at least two datasources'
-        super().__init__(name, encoders=None)
+        encoders = [ChainedDataEncoder(ds.get_encoders()) for ds in data_sources]
+        instance_shapes = [ds.get_instance_shape() for ds in data_sources]
+        com_data_encoder = CompoundDataEncoder(encoders, instance_shapes)
+        super().__init__(name, encoders=[com_data_encoder])
         self._data_sources = data_sources
         self.sz = len(data_sources[0])
         for ds in data_sources:
@@ -129,6 +135,12 @@ class CompoundDataSource(DataSource):
         raise NotImplementedError(
             "Can't select features from CompoundDataSource - too ambigue. Raise a ticket on Github if you need this.")
 
+    def get_encoders(self) -> List[DataEncoder]:
+        encoders = [ChainedDataEncoder(ds.get_encoders()) for ds in self._data_sources]
+        instance_shapes = [ds.get_instance_shape() for ds in self._data_sources]
+        com_data_encoder = CompoundDataEncoder(encoders, instance_shapes)
+        return [com_data_encoder]
+
 
 # ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
 TensorDataSource = ForwardRef('TensorDataSource')
@@ -155,7 +167,16 @@ class TensorDataSource(DataSource):
     @validate_arguments(config=ArbitraryTypes)
     def split(self, splitter: TrainValTestSpliter) -> Tuple['TensorDataSource', 'TensorDataSource', 'TensorDataSource']:
         train, val, test = splitter.split(self.tensors)
-        return self.__class__(self.name, train), self.__class__(self.name, val), self.__class__(self.name, test)
+        if not isinstance(train, np.ndarray):
+            train = np.array(list(train))
+        if not isinstance(val, np.ndarray):
+            val = np.array(list(val))
+        if not isinstance(test, np.ndarray):
+            test = np.array(list(test))
+        train_ds = self._clone_with_tensors_encoders(train)
+        val_ds = self._clone_with_tensors_encoders(val)
+        test_ds = self._clone_with_tensors_encoders(test)
+        return train_ds, val_ds, test_ds
 
     @validate_arguments(config=ArbitraryTypes)
     def _clone_with_tensors_encoders(self,
@@ -215,6 +236,9 @@ class TensorDataSource(DataSource):
         tensors = self.tensors[:, features]
         new_encoders = [encoder.select_features(features) for encoder in self.encoders]
         return self._clone_with_tensors_encoders(tensors, new_encoders, name)
+
+    def get_instance_shape(self) -> Tuple[int, ...]:
+        return self.tensors.shape[1:]
 
 
 @dataclass(config=ImmutableConfig)
@@ -283,6 +307,9 @@ class TimeseriesDataSource(TensorDataSource):
         return self.__class__(name=name, tensors=tensors, length=self.length, sampling_rate=self.sampling_rate,
                               stride=self.stride, reverse=self.reverse, encoders=encoders,
                               target_params=self._target_params)
+
+    def get_instance_shape(self) -> Tuple[int, ...]:
+        return (self.length, self.tensors.shape[1])
 
     @validate_arguments(config=ArbitraryTypes)
     def split(self, splitter: TrainValTestSpliter) -> Tuple[
@@ -431,6 +458,10 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
     def select_features(self, features: Collection[int], name: Optional[str] = None) -> DataSource:
         raise NotImplementedError("Can't implement select features on a target DataSource")
 
+    def get_instance_shape(self) -> Tuple[int, ...]:
+        return (self._target_params.pred_len,)
+
+
 # ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
 DataSet = ForwardRef('DataSet')
 
@@ -456,10 +487,11 @@ class DataSet():
             encoders = defaultdict(list)
         for name, data_source in sources.items():
             train, val, test = data_source.split(splitter)
-            encoded_train = train.fit_encode(encoders[name])
+            encoder_list_for_train = encoders[name]
+            encoded_train = train.fit_encode(encoder_list_for_train)
             train_input_sources[name] = encoded_train
-            val_input_sources[name] = val.encode(encoded_train.get_encoders())
-            test_input_sources[name] = test.encode(encoded_train.get_encoders())
+            val_input_sources[name] = val.encode(encoder_list_for_train)
+            test_input_sources[name] = test.encode(encoder_list_for_train)
         return train_input_sources, val_input_sources, test_input_sources
 
     @validate_arguments(config=ArbitraryTypes)

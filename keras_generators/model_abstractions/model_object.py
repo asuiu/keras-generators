@@ -7,7 +7,7 @@ import pickle
 from abc import ABC
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Union, Tuple, Optional, Type
+from typing import Dict, List, Union, Tuple, Optional, Type, Any
 
 import tensorflow as tf
 from keras import Model
@@ -131,7 +131,12 @@ class SimpleModelObject(ModelObject):
             pickle.dump(self.encoders, f)
 
     @classmethod
-    def from_model_dir(cls, hdf5_path: Path, model_params_cls: Type[ModelParams], device: str) -> 'ModelObject':
+    def from_model_dir(cls,
+                       hdf5_path: Path,
+                       model_params_cls: Type[ModelParams],
+                       device: str = "/CPU:0",
+                       custom_classes: Optional[List[Any]] = None
+                       ) -> 'ModelObject':
         model_dir = hdf5_path.parent
         mp = model_params_cls.from_file(model_dir / "mp.json")
         encoders_dir = model_dir / 'encoders'
@@ -139,9 +144,7 @@ class SimpleModelObject(ModelObject):
             encoders = pickle.load(f)
 
         with tf.device(device):
-            custom_object_classes = [
-                model_params_cls,
-            ]
+            custom_object_classes = [model_params_cls] + (custom_classes or [])
             custom_objects = {cls.__name__: cls for cls in custom_object_classes}
             model = tf.keras.models.load_model(hdf5_path, custom_objects=custom_objects)
         return cls(mp=mp, model=model, encoders=encoders)

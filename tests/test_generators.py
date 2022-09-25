@@ -461,6 +461,34 @@ class TestCompoundDataSource(TestCase):
         tds_comp_decoded = encoded.decode()
         np.testing.assert_array_almost_equal(tds_comp[:], tds_comp_decoded[:])
 
+    def test_decode_data_timeseries(self):
+        rows, cols = 5, 2
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TimeseriesDataSource("test1", na1, length=3)
+        tds2 = TimeseriesDataSource("test2", na2, length=3)
+        tds_comp: CompoundDataSource = tds1 + tds2
+        encoded = tds_comp.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        data_to_decode = encoded[:]
+        ds_to_decode = TensorDataSource("test_decode",data_to_decode, encoders=encoded.get_encoders())
+        decoded_data_ds = ds_to_decode.decode()
+        np.testing.assert_array_almost_equal(tds_comp[:], decoded_data_ds[:])
+
+    def test_decode_data_tensors(self):
+        rows, cols = 5, 2
+        na1 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        na2 += 0.5
+        tds1 = TensorDataSource("test1", na1)
+        tds2 = TensorDataSource("test2", na2)
+        tds_comp: CompoundDataSource = tds1 + tds2
+        encoded = tds_comp.fit_encode(encoders=[ScaleEncoder(MinMaxScaler())])
+        data_to_decode = encoded[:]
+        ds_to_decode = TensorDataSource("test_decode",data_to_decode, encoders=encoded.get_encoders())
+        decoded_data_ds = ds_to_decode.decode()
+        np.testing.assert_array_almost_equal(tds_comp[:], decoded_data_ds[:])
+
 
 class TestXYBatchGenerator(TestCase):
     def test_on_epoch_end(self):
