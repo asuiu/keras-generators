@@ -202,9 +202,9 @@ class TensorDataSource(DataSource):
         return len(self.tensors)
 
     def __getitem__(self, item: Union[int, slice, Collection[int]]) -> np.ndarray:
-        if isinstance(item, (slice, int, Collection)):
+        if isinstance(item, (slice, int, np.integer, Collection[Union[np.integer, int]])):
             return self.tensors[item]
-        raise ValueError(f'Unsupported type: {type(item)}')
+        raise ValueError(f'{self.__class__}.__getitem__() Unsupported type: {type(item)}')
 
     @validate_arguments(config=ArbitraryTypes)
     def get_by_idx_set(self, index_set: Collection[int]) -> np.ndarray:

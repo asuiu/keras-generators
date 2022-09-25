@@ -4,11 +4,12 @@
 from unittest import TestCase, main
 
 import numpy as np
+from numpy import array
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from keras_generators.encoders import ScaleEncoder
 from keras_generators.generators import TensorDataSource, DataSet, TimeseriesDataSource, TimeseriesTargetsParams, \
-    TargetTimeseriesDataSource, CompoundDataSource
+    TargetTimeseriesDataSource, CompoundDataSource, XYBatchGenerator
 from keras_generators.splitters import OrderedSplitter
 
 
@@ -459,6 +460,37 @@ class TestCompoundDataSource(TestCase):
         np.testing.assert_array_almost_equal(expected_el, encoded[0])
         tds_comp_decoded = encoded.decode()
         np.testing.assert_array_almost_equal(tds_comp[:], tds_comp_decoded[:])
+
+
+class TestXYBatchGenerator(TestCase):
+    def test_on_epoch_end(self):
+        rows, cols = 10, 2
+        na = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        dsource1 = TensorDataSource('ds1', na)
+        na2 = np.arange(rows * 3, dtype=np.float64).reshape((rows, 3))
+        dsource2 = TensorDataSource('ds2', na2)
+        na3 = np.arange(rows * 2, dtype=np.float64).reshape((rows, 2))
+        dsource3 = TensorDataSource('ds3', na3)
+        dsources = {ds.name: ds for ds in [dsource1, dsource2]}
+        encoders = {dsource1.name: [ScaleEncoder(scaler=MinMaxScaler())],
+                    dsource2.name: [ScaleEncoder(scaler=MinMaxScaler())],
+                    dsource3.name: [ScaleEncoder(scaler=MinMaxScaler())]
+                    }
+        ds_test = DataSet(input_sources=dsources, target_sources={dsource3.name: dsource3})
+        splitter = OrderedSplitter()
+        train, val, test = ds_test.split_encode(splitter, encoders=encoders)
+        xy_gen = XYBatchGenerator(train.input_sources, train.target_sources, batch_size=2, shuffle=False)
+        batch = xy_gen[np.int32(0)]
+        expected_batch = ({'ds1': array([[0., 0.],
+                                         [0.2, 0.2]]),
+                           'ds2': array([[0., 0., 0.],
+                                         [0.2, 0.2, 0.2]]
+                                        )
+                           }, {'ds3': array([[0., 0.],
+                                             [0.2, 0.2]])})
+        np.testing.assert_array_almost_equal(expected_batch[0]['ds1'], batch[0]['ds1'])
+        np.testing.assert_array_almost_equal(expected_batch[0]['ds2'], batch[0]['ds2'])
+        np.testing.assert_array_almost_equal(expected_batch[1]['ds3'], batch[1]['ds3'])
 
 
 if __name__ == '__main__':
