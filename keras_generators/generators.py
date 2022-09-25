@@ -432,7 +432,7 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
         raise NotImplementedError("Can't implement select features on a target DataSource")
 
 # ForwardRef is required by PyDantic validators for self return type for Python <3.11. Python 3.11 solves this with PEP 673
-DataSet = ForwardRef('Foo')
+DataSet = ForwardRef('DataSet')
 
 
 class DataSet():
