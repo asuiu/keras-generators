@@ -13,29 +13,31 @@ import tensorflow as tf
 from keras import Model
 from keras.callbacks import Callback, History, ReduceLROnPlateau, EarlyStopping, ModelCheckpoint, CSVLogger
 
+from ..callbacks import MetricCheckpoint
 from ..encoders import DataEncoder
 from ..generators import XYBatchGenerator, XBatchGenerator, TensorDataSource, DataSource
 from ..model_abstractions.model_params import ModelParams
 
 
 class ModelObject(ABC):
-
-    def __init__(self,
-                 mp: ModelParams,
-                 model: Model,
-                 encoders: Dict[str, List[DataEncoder]],
-                 ) -> None:
+    def __init__(
+        self,
+        mp: ModelParams,
+        model: Model,
+        encoders: Dict[str, List[DataEncoder]],
+    ) -> None:
         self.mp = mp
         self.model = model
         self.encoders = encoders
 
-    def train(self,
-              train_gen: XYBatchGenerator,
-              val_gen: XYBatchGenerator,
-              device: str = "/CPU:0",
-              callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
-              verbose=1
-              ) -> History:
+    def train(
+        self,
+        train_gen: XYBatchGenerator,
+        val_gen: XYBatchGenerator,
+        device: str = "/CPU:0",
+        callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
+        verbose=1,
+    ) -> History:
         mp = self.mp
 
         with tf.device(device):
@@ -49,14 +51,34 @@ class ModelObject(ABC):
             )
         return history
 
-    def predict(self, x: XBatchGenerator,
-                device: str = "/CPU:0"
-                ) -> DataSource:
+    def predict(self, x: XBatchGenerator, device: str = "/CPU:0") -> DataSource:
+        """
+        Note: the XBatchGenerator must be created with the same encoders as the ones used to train the model.
+        """
         with tf.device(device):
             res = self.model.predict(x)
         res_ds = TensorDataSource(name="prediction", tensors=res, encoders=self.encoders[self.mp.target_name])
         decoded = res_ds.decode()
         return decoded
+
+    def predict_raw(self, raw_input_sources: Dict[str, DataSource]) -> DataSource:
+        """
+        This method is used to predict on raw input sources - i.e. unscaled/unnormalized.
+        """
+        scaled_input_tds = {name: tds.encode(self.encoders[name]) for name, tds in raw_input_sources.items()}
+        x_gen = XBatchGenerator(scaled_input_tds)
+        return self.predict(x_gen)
+
+    def evaluate_raw(self, xy: XYBatchGenerator, device: str = "/CPU:0") -> Dict[str, float]:
+        """
+        This method is used to evaluate on raw input sources - i.e. unscaled/unnormalized.
+        """
+        scaled_inputs = {name: tds.encode(self.encoders[name]) for name, tds in xy.inputs.items()}
+        scaled_targets = {name: tds.encode(self.encoders[name]) for name, tds in xy.targets.items()}
+        scaled_xy = XYBatchGenerator(scaled_inputs, scaled_targets, shuffle=False, batch_size=xy.batch_size)
+        with tf.device(device):
+            res = self.model.evaluate(scaled_xy)
+        return {self.model.metrics_names[i]: v for i, v in enumerate(res)}
 
     @staticmethod
     def construct_model_dir(name: str, base_dir: Union[str, Path] = "model-data") -> Path:
@@ -66,22 +88,23 @@ class ModelObject(ABC):
 
 
 class SimpleModelObject(ModelObject):
-
-    def __init__(self,
-                 mp: ModelParams,
-                 model: Model,
-                 encoders: Dict[str, List[DataEncoder]],
-                 ) -> None:
+    def __init__(
+        self,
+        mp: ModelParams,
+        model: Model,
+        encoders: Dict[str, List[DataEncoder]],
+    ) -> None:
         super().__init__(mp, model, encoders)
 
-    def train(self,
-              train_gen: XYBatchGenerator,
-              val_gen: XYBatchGenerator,
-              device: str = "/CPU:0",
-              callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
-              model_dir: Optional[Path] = None,
-              verbose=1,
-              ) -> History:
+    def train(
+        self,
+        train_gen: XYBatchGenerator,
+        val_gen: XYBatchGenerator,
+        device: str = "/CPU:0",
+        callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
+        model_dir: Optional[Path] = None,
+        verbose=1,
+    ) -> History:
         model_dir.mkdir(parents=True, exist_ok=True)
         mp = self.mp
         _callbacks = list(callbacks)
@@ -96,10 +119,12 @@ class SimpleModelObject(ModelObject):
         self.save_scalers(model_dir)
 
         path_pattern = model_dir / "weights_e{epoch:03d}_tl{loss:.8f}_vl{val_loss:.8f}.hdf5"
-        checkpoint = ModelCheckpoint(
-            str(path_pattern), monitor="val_loss", verbose=1, save_best_only=False, save_weights_only=False
-        )
+        checkpoint = ModelCheckpoint(str(path_pattern), monitor="val_loss", verbose=1, save_best_only=False, save_weights_only=False)
         _callbacks.append(checkpoint)
+
+        metrics_checkpoint = MetricCheckpoint(model_dir)
+        _callbacks.append(metrics_checkpoint)
+
         csv_logger = CSVLogger(filename=str(model_dir / "metrics.csv"), append=True)
         _callbacks.append(csv_logger)
 
@@ -116,7 +141,7 @@ class SimpleModelObject(ModelObject):
                 )
         except Exception:
             # Next callbacks do not close their files in case the train fails
-            for cb in [csv_logger]:
+            for cb in [csv_logger, metrics_checkpoint]:
                 try:
                     cb.on_train_end(None)
                 except Exception:
@@ -125,22 +150,19 @@ class SimpleModelObject(ModelObject):
         return history
 
     def save_scalers(self, model_dir: Path):
-        encoders_dir = model_dir / 'encoders'
+        encoders_dir = model_dir / "encoders"
         encoders_dir.mkdir(parents=True, exist_ok=True)
-        with gzip.open(encoders_dir / f'encoders.pk.gz', "wb") as f:
+        with gzip.open(encoders_dir / f"encoders.pk.gz", "wb") as f:
             pickle.dump(self.encoders, f)
 
     @classmethod
-    def from_model_dir(cls,
-                       hdf5_path: Path,
-                       model_params_cls: Type[ModelParams],
-                       device: str = "/CPU:0",
-                       custom_classes: Optional[List[Any]] = None
-                       ) -> 'ModelObject':
+    def from_model_dir(
+        cls, hdf5_path: Path, model_params_cls: Type[ModelParams], device: str = "/CPU:0", custom_classes: Optional[List[Any]] = None
+    ) -> "ModelObject":
         model_dir = hdf5_path.parent
         mp = model_params_cls.from_file(model_dir / "mp.json")
-        encoders_dir = model_dir / 'encoders'
-        with gzip.open(encoders_dir / f'encoders.pk.gz', "rb") as f:
+        encoders_dir = model_dir / "encoders"
+        with gzip.open(encoders_dir / f"encoders.pk.gz", "rb") as f:
             encoders = pickle.load(f)
 
         with tf.device(device):

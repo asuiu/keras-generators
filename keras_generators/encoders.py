@@ -5,15 +5,33 @@ from typing import Callable, Union, Collection, Tuple, List
 
 import numpy as np
 import sklearn
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, MaxAbsScaler, RobustScaler, Binarizer, PowerTransformer
+from pyxtension import validate
+from sklearn.preprocessing import (
+    MinMaxScaler,
+    StandardScaler,
+    MaxAbsScaler,
+    RobustScaler,
+    Binarizer,
+    PowerTransformer,
+)
 
-Scaler = Union[StandardScaler, MinMaxScaler, MaxAbsScaler, RobustScaler, Binarizer, PowerTransformer]
+Scaler = Union[
+    StandardScaler,
+    MinMaxScaler,
+    MaxAbsScaler,
+    RobustScaler,
+    Binarizer,
+    PowerTransformer,
+]
+
+_FIRST_MONDAY_TS_MS = 345600000
+_DAY_MS = 24 * 3600 * 1000
+_WEEK_MS = 7 * 24 * 3600 * 1000
 
 
 class DataEncoder(ABC):
-    @abstractmethod
     def fit_encode(self, data: np.ndarray) -> np.ndarray:
-        raise NotImplementedError()
+        return self.encode(data)
 
     @abstractmethod
     def encode(self, data: np.ndarray) -> np.ndarray:
@@ -24,7 +42,7 @@ class DataEncoder(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def select_features(self, features_idxs: Collection[int]) -> 'DataEncoder':
+    def select_features(self, features_idxs: Collection[int]) -> "DataEncoder":
         """
         Creates a new DataEncoder with the subset of the selected features.
         It's responsibility is to adapt the encoder to the sub-set of features.
@@ -33,7 +51,7 @@ class DataEncoder(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def clone(self) -> 'DataEncoder':
+    def clone(self) -> "DataEncoder":
         raise NotImplementedError()
 
 
@@ -59,16 +77,20 @@ class ChainedDataEncoder(DataEncoder):
             decoded_na = encoder.decode(data=decoded_na)
         return decoded_na
 
-    def select_features(self, features_idxs: Collection[int]) -> 'ChainedDataEncoder':
-        new_encoders = [encoder.select_features(features_idxs) for encoder in self.encoders]
+    def select_features(self, features_idxs: Collection[int]) -> "ChainedDataEncoder":
+        new_encoders = [
+            encoder.select_features(features_idxs) for encoder in self.encoders
+        ]
         return self.__class__(new_encoders)
 
-    def clone(self) -> 'ChainedDataEncoder':
+    def clone(self) -> "ChainedDataEncoder":
         return self.__class__([encoder.clone() for encoder in self.encoders])
 
 
 class CompoundDataEncoder(DataEncoder):
-    def __init__(self, encoders: List[DataEncoder], instance_shapes: Collection[Tuple[int, ...]]) -> None:
+    def __init__(
+        self, encoders: List[DataEncoder], instance_shapes: Collection[Tuple[int, ...]]
+    ) -> None:
         self.encoders = encoders
         self.instance_shapes = instance_shapes
 
@@ -77,7 +99,7 @@ class CompoundDataEncoder(DataEncoder):
         cur_col = 0
         for shape in self.instance_shapes:
             cols = shape[-1]
-            columns = data[..., cur_col:cur_col + cols]
+            columns = data[..., cur_col : cur_col + cols]
             nas.append(columns)
             cur_col += cols
         return nas
@@ -109,12 +131,16 @@ class CompoundDataEncoder(DataEncoder):
         decoded_na = np.concatenate(decoded_nas, axis=-1)
         return decoded_na
 
-    def select_features(self, features_idxs: Collection[int]) -> 'DataEncoder':
-        raise NotImplementedError("select_features() doesn't make much sense for CompoundDataEncoder")
+    def select_features(self, features_idxs: Collection[int]) -> "DataEncoder":
+        raise NotImplementedError(
+            "select_features() doesn't make much sense for CompoundDataEncoder"
+        )
 
-    def clone(self) -> 'CompoundDataEncoder':
+    def clone(self) -> "CompoundDataEncoder":
         new_encoders = [encoder.clone() for encoder in self.encoders]
-        return self.__class__(encoders=new_encoders, instance_shapes=self.instance_shapes)
+        return self.__class__(
+            encoders=new_encoders, instance_shapes=self.instance_shapes
+        )
 
 
 class ScaleEncoder(DataEncoder):
@@ -128,7 +154,9 @@ class ScaleEncoder(DataEncoder):
         self.scaler = scaler
         self.column_wise = column_wise
 
-    def _transform(self, data: np.ndarray, transformer: Callable[[np.ndarray], np.ndarray]) -> np.ndarray:
+    def _transform(
+        self, data: np.ndarray, transformer: Callable[[np.ndarray], np.ndarray]
+    ) -> np.ndarray:
         na = data
         if self.column_wise:
             if len(na.shape) == 2:
@@ -137,7 +165,7 @@ class ScaleEncoder(DataEncoder):
                 na_to_norm = na.reshape(na.shape[0] * na.shape[1], na.shape[2])
                 return transformer(na_to_norm).reshape(na.shape)
             else:
-                raise ValueError(f'Unsupported shape: {na.shape}')
+                raise ValueError(f"Unsupported shape: {na.shape}")
         na_to_norm = na.reshape(na.shape[0], 1)
         return transformer(na_to_norm).reshape(na.shape)
 
@@ -153,13 +181,15 @@ class ScaleEncoder(DataEncoder):
         transformer = self.scaler.inverse_transform
         return self._transform(data, transformer)
 
-    def select_features(self, features_idxs: Collection[int]) -> 'ScaleEncoder':
+    def select_features(self, features_idxs: Collection[int]) -> "ScaleEncoder":
         if isinstance(self.scaler, StandardScaler):
             scale_ = self.scaler.scale_[features_idxs]
             mean_ = self.scaler.mean_[features_idxs]
             var_ = self.scaler.var_[features_idxs]
             n_samples_seen_ = self.scaler.n_samples_seen_
-            new_scaler = StandardScaler(with_mean=self.scaler.with_mean, with_std=self.scaler.with_std)
+            new_scaler = StandardScaler(
+                with_mean=self.scaler.with_mean, with_std=self.scaler.with_std
+            )
             new_scaler.scale_ = scale_
             new_scaler.mean_ = mean_
             new_scaler.var_ = var_
@@ -182,6 +212,87 @@ class ScaleEncoder(DataEncoder):
             return ScaleEncoder(new_scaler, self.column_wise)
         raise NotImplementedError()
 
-    def clone(self) -> 'ScaleEncoder':
+    def clone(self) -> "ScaleEncoder":
         new_scaler = sklearn.base.clone(self.scaler)
         return self.__class__(scaler=new_scaler, column_wise=self.column_wise)
+
+
+class PeriodEncoder(DataEncoder):
+    """
+    Encode a periodic data on a trigonometric circle using sine and cosine.
+    For example, to encode time of day, use 24h period
+    Note: the output of the encoder will be a doubled vector (2 * n_features)
+            where the first half is sine and the second half is cosine
+    """
+
+    def __init__(self, period: float) -> None:
+        validate(period > 0, "Period must be positive")
+        self._period = period
+
+    def fit_encode(self, data: np.ndarray) -> np.ndarray:
+        return self.encode(data)
+
+    def encode(self, data: np.ndarray) -> np.ndarray:
+        # transform the data to be in the range [0, 1]
+        offset = np.modf(data / self._period)[0]
+        if np.any(offset < 0):
+            # to handle negative offsets, we add 1 and perform a modulo 1
+            offset = np.modf(offset + 1)[0]
+        time_coord_on_circle = 2 * np.pi * offset
+        sin = np.sin(time_coord_on_circle)
+        cos = np.cos(time_coord_on_circle)
+        return np.concatenate([sin, cos], axis=-1)
+
+    def decode(self, data: np.ndarray) -> np.ndarray:
+        raise NotImplementedError("Can not decode period encoded data")
+
+    def select_features(self, features_idxs: Collection[int]) -> "PeriodEncoder":
+        return self
+
+    def clone(self) -> "PeriodEncoder":
+        return self.__class__(period=self._period)
+
+
+class DayOfWeekEncoder(DataEncoder):
+    """
+    This transformer encodes the received timestamp in milliseconds to the corresponding day of the week.
+    """
+
+    def encode(self, data: np.ndarray) -> np.ndarray:
+        dow_na = (
+            np.floor_divide(data - _FIRST_MONDAY_TS_MS, _DAY_MS).astype(np.int64) % 7
+        )
+        return dow_na
+
+    def decode(self, data: np.ndarray) -> np.ndarray:
+        raise NotImplementedError("Can not decode period encoded data")
+
+    def select_features(self, features_idxs: Collection[int]) -> "PeriodEncoder":
+        # It's okay that we return self here, because the encoder is stateless
+        return self
+
+    def clone(self) -> "PeriodEncoder":
+        # It's okay that we return self here, because the encoder is stateless
+        return self
+
+
+class WeekTSEncoder(DataEncoder):
+    """
+    This transformer encodes the received timestamp in milliseconds to millisecond within current week,
+        i.e. number of milliseconds since Monday 00:00:00.
+    """
+
+    def encode(self, data: np.ndarray) -> np.ndarray:
+        week_ts_na = (data - _FIRST_MONDAY_TS_MS) % _WEEK_MS
+        return week_ts_na
+
+    def decode(self, data: np.ndarray) -> np.ndarray:
+        raise NotImplementedError("Can not decode period encoded data")
+
+    def select_features(self, features_idxs: Collection[int]) -> "PeriodEncoder":
+        # It's okay that we return self here, because the encoder is stateless
+        return self
+
+    def clone(self) -> "PeriodEncoder":
+        # It's okay that we return self here, because the encoder is stateless
+        return self

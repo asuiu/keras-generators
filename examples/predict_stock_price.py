@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from keras import layers, Model
-from keras.optimizer_v2.adam import Adam
+from keras.optimizers import Adam
+
 from pydantic import PositiveInt, conint
 from sklearn.preprocessing import StandardScaler
 from tsx import TS
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     targets_ds = TargetTimeseriesDataSource.from_timeseries_datasource(encoded_input_ds, name=_mp.target_name)
 
     dataset = DataSet(input_sources={_mp.seq_input_name: encoded_input_ds}, target_sources={_mp.target_name: targets_ds})
-    train_ds, val_ds, test_ds = dataset.split(splitter=OrderedSplitter(train=0.6, val=0.2))
+    train_ds, val_ds, test_ds = dataset.split(splitter=OrderedSplitter(train=_mp.train_size_ratio, val=_mp.val_size_ratio))
     train_gen = XYBatchGenerator(train_ds.input_sources, train_ds.target_sources, batch_size=_mp.batch_size)
     val_gen = XYBatchGenerator(val_ds.input_sources, val_ds.target_sources, batch_size=_mp.val_batch_size)
     test_gen = XYBatchGenerator(test_ds.input_sources, test_ds.target_sources, batch_size=_mp.val_batch_size)
