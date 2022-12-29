@@ -1,0 +1,8 @@
+-r requirements.txt
+black[d]>=22.10.0
+pre-commit>=2.20.0
+
+# pre-commit hooks to improve python code quality
+
+# Prospector is incompatible with flake8 due to some dependencies mess, so let these as is
+prospector>=1.7.7

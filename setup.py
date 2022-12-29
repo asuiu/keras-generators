@@ -3,7 +3,7 @@ from pathlib import Path
 
 from setuptools import find_packages
 
-VERSION = '1.2.0'
+VERSION = "1.2.1"
 
 this_file = Path(__file__).resolve()
 readme = this_file.parent / "README.md"
@@ -46,5 +46,5 @@ setup(
     license="Apache License 2.0",
     packages=find_packages(exclude=("*test*",)),
     setup_requires=[],
-    python_requires='>=3.7'
+    python_requires=">=3.7",
 )
