@@ -6,3 +6,4 @@ pre-commit>=2.20.0
 
 # Prospector is incompatible with flake8 due to some dependencies mess, so let these as is
 prospector>=1.7.7
+twine>=4.0.2

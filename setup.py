@@ -1,9 +1,10 @@
+# pylint: disable=deprecated-module
 from distutils.core import setup
 from pathlib import Path
 
 from setuptools import find_packages
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 this_file = Path(__file__).resolve()
 readme = this_file.parent / "README.md"
