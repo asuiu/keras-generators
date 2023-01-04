@@ -4,7 +4,7 @@ from pathlib import Path
 
 from setuptools import find_packages
 
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 
 this_file = Path(__file__).resolve()
 readme = this_file.parent / "README.md"

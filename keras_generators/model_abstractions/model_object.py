@@ -7,15 +7,22 @@ import pickle
 from abc import ABC
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Union, Tuple, Optional, Type, Any
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import tensorflow as tf
 from keras import Model
-from keras.callbacks import Callback, History, ReduceLROnPlateau, EarlyStopping, ModelCheckpoint, CSVLogger
+from keras.callbacks import (
+    Callback,
+    CSVLogger,
+    EarlyStopping,
+    History,
+    ModelCheckpoint,
+    ReduceLROnPlateau,
+)
 
 from ..callbacks import MetricCheckpoint
 from ..encoders import DataEncoder
-from ..generators import XYBatchGenerator, XBatchGenerator, TensorDataSource, DataSource
+from ..generators import DataSource, TensorDataSource, XBatchGenerator, XYBatchGenerator
 from ..model_abstractions.model_params import ModelParams
 
 
@@ -61,13 +68,13 @@ class ModelObject(ABC):
         decoded = res_ds.decode()
         return decoded
 
-    def predict_raw(self, raw_input_sources: Dict[str, DataSource]) -> DataSource:
+    def predict_raw(self, raw_input_sources: Dict[str, DataSource], device: str = "/CPU:0") -> DataSource:
         """
         This method is used to predict on raw input sources - i.e. unscaled/unnormalized.
         """
         scaled_input_tds = {name: tds.encode(self.encoders[name]) for name, tds in raw_input_sources.items()}
         x_gen = XBatchGenerator(scaled_input_tds)
-        return self.predict(x_gen)
+        return self.predict(x_gen, device=device)
 
     def evaluate_raw(self, xy: XYBatchGenerator, device: str = "/CPU:0") -> Dict[str, float]:
         """
@@ -88,22 +95,14 @@ class ModelObject(ABC):
 
 
 class SimpleModelObject(ModelObject):
-    def __init__(
-        self,
-        mp: ModelParams,
-        model: Model,
-        encoders: Dict[str, List[DataEncoder]],
-    ) -> None:
-        super().__init__(mp, model, encoders)
-
     def train(
         self,
         train_gen: XYBatchGenerator,
         val_gen: XYBatchGenerator,
         device: str = "/CPU:0",
         callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
-        model_dir: Optional[Path] = None,
         verbose=1,
+        model_dir: Optional[Path] = None,
     ) -> History:
         model_dir.mkdir(parents=True, exist_ok=True)
         mp = self.mp
@@ -115,7 +114,7 @@ class SimpleModelObject(ModelObject):
             early_stopping = EarlyStopping(patience=mp.early_stop_patience, min_delta=0.0001)
             _callbacks.append(early_stopping)
 
-        mp.serialize_to_file(model_dir / f"mp.json")
+        mp.serialize_to_file(model_dir / "mp.json")
         self.save_scalers(model_dir)
 
         path_pattern = model_dir / "weights_e{epoch:03d}_tl{loss:.8f}_vl{val_loss:.8f}.hdf5"
@@ -144,7 +143,7 @@ class SimpleModelObject(ModelObject):
             for cb in [csv_logger, metrics_checkpoint]:
                 try:
                     cb.on_train_end(None)
-                except Exception:
+                except Exception:  # pylint: disable=broad-except
                     pass
             raise
         return history
@@ -152,17 +151,17 @@ class SimpleModelObject(ModelObject):
     def save_scalers(self, model_dir: Path):
         encoders_dir = model_dir / "encoders"
         encoders_dir.mkdir(parents=True, exist_ok=True)
-        with gzip.open(encoders_dir / f"encoders.pk.gz", "wb") as f:
+        with gzip.open(encoders_dir / "encoders.pk.gz", "wb") as f:
             pickle.dump(self.encoders, f)
 
     @classmethod
     def from_model_dir(
         cls, hdf5_path: Path, model_params_cls: Type[ModelParams], device: str = "/CPU:0", custom_classes: Optional[List[Any]] = None
-    ) -> "ModelObject":
+    ):
         model_dir = hdf5_path.parent
         mp = model_params_cls.from_file(model_dir / "mp.json")
         encoders_dir = model_dir / "encoders"
-        with gzip.open(encoders_dir / f"encoders.pk.gz", "rb") as f:
+        with gzip.open(encoders_dir / "encoders.pk.gz", "rb") as f:
             encoders = pickle.load(f)
 
         with tf.device(device):

@@ -108,21 +108,21 @@ class TensorDataSource(DataSource):
     def as_numpy(self) -> np.ndarray:
         return self.tensors
 
+    def _get_ds_from_split(self, tensors: Union[np.ndarray, Sequence[np.ndarray]]) -> Optional[TensorDataSource]:
+        if not len(tensors):  # pylint: disable=use-implicit-booleaness-not-len
+            return None
+        if not isinstance(tensors, np.ndarray):
+            tensors = np.array(list(tensors))
+        return self.clone_with_tensors_encoders(tensors)
+
     @validate_arguments(config=ArbitraryTypes)
-    def split(self, splitter: TrainValTestSpliter) -> Tuple[TensorDataSource, TensorDataSource, Optional[TensorDataSource]]:
+    def split(
+        self, splitter: TrainValTestSpliter
+    ) -> Tuple[Optional[TensorDataSource], Optional[TensorDataSource], Optional[TensorDataSource],]:
         train, val, test = splitter.split(self.tensors)
-        if not isinstance(train, np.ndarray):
-            train = np.array(list(train))
-        train_ds = self.clone_with_tensors_encoders(train)
-        if not isinstance(val, np.ndarray):
-            val = np.array(list(val))
-        val_ds = self.clone_with_tensors_encoders(val)
-        if len(test):
-            if not isinstance(test, np.ndarray):
-                test = np.array(list(test))
-            test_ds = self.clone_with_tensors_encoders(test)
-        else:
-            test_ds = None
+        train_ds = self._get_ds_from_split(train)
+        val_ds = self._get_ds_from_split(val)
+        test_ds = self._get_ds_from_split(test)
         return train_ds, val_ds, test_ds
 
     @validate_arguments(config=ArbitraryTypes)
@@ -280,7 +280,7 @@ class TimeseriesDataSource(TensorDataSource):
     @validate_arguments(config=ArbitraryTypes)
     def split(
         self, splitter: TrainValTestSpliter
-    ) -> Tuple["TimeseriesDataSource", "TimeseriesDataSource", Optional["TimeseriesDataSource"]]:
+    ) -> Tuple["TimeseriesDataSource", Optional["TimeseriesDataSource"], Optional["TimeseriesDataSource"],]:
         """For the moment it supports only OrderedSplitter, as this it TimeSeries"""
         assert isinstance(splitter, OrderedSplitter)
         instance_idxes = np.arange(self.size)
@@ -293,10 +293,15 @@ class TimeseriesDataSource(TensorDataSource):
         _, train_end = self._get_window_by_instance_idx(train_idxes[-1])
         train_end += target_raw_len
         train_tensor = self.tensors[train_start:train_end]
-        val_start, _ = self._get_window_by_instance_idx(val_idxes[0])
-        _, val_end = self._get_window_by_instance_idx(val_idxes[-1])
-        val_end += target_raw_len
-        val_tensor = self.tensors[val_start:val_end]
+        train_ds = self.clone_with_tensors_encoders(train_tensor)
+        if len(val_idxes):
+            val_start, _ = self._get_window_by_instance_idx(val_idxes[0])
+            _, val_end = self._get_window_by_instance_idx(val_idxes[-1])
+            val_end += target_raw_len
+            val_tensor = self.tensors[val_start:val_end]
+            val_ds = self.clone_with_tensors_encoders(val_tensor)
+        else:
+            val_ds = None
         if len(test_idxes):
             test_start, _ = self._get_window_by_instance_idx(test_idxes[0])
             _, test_end = self._get_window_by_instance_idx(test_idxes[-1])
@@ -305,9 +310,6 @@ class TimeseriesDataSource(TensorDataSource):
             test_ds = self.clone_with_tensors_encoders(test_tensor)
         else:
             test_ds = None
-        train_ds = self.clone_with_tensors_encoders(train_tensor)
-        val_ds = self.clone_with_tensors_encoders(val_tensor)
-
         return train_ds, val_ds, test_ds
 
     def get_targets(self, target_name: str = "target") -> TensorDataSource:
@@ -391,9 +393,9 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
     @classmethod
     @validate_arguments(config=ArbitraryTypes)
     def from_timeseries_datasource(cls, ds: TimeseriesDataSource, name: Optional[str] = None) -> "TargetTimeseriesDataSource":
-        assert ds._target_params is not None, "Can't create target datasource without target parameters"
+        assert ds._target_params is not None, "Can't create target datasource without target parameters"  # pylint: disable=protected-access
         name = name or ds.name
-        idx_arr = np.array([ds._target_params.target_idx])
+        idx_arr = np.array([ds._target_params.target_idx])  # pylint: disable=protected-access
         new_ds = ds.select_features(idx_arr, name)
         new_inst = cls(
             name=name,
@@ -403,7 +405,7 @@ class TargetTimeseriesDataSource(TimeseriesDataSource):
             stride=new_ds.stride,
             reverse=new_ds.reverse,
             encoders=new_ds.encoders,
-            target_params=new_ds._target_params,
+            target_params=new_ds._target_params,  # pylint: disable=protected-access
         )
         assert len(ds) == len(new_inst)
         return new_inst
@@ -591,13 +593,24 @@ class DataSet:
             else:
                 data_source = data_source.clone_with_tensors_encoders(tensors=data_source.as_numpy(), encoders=[])
             train, val, test = data_source.split(splitter)
-            encoder_list_for_train = encoders.get(name, [])
-            encoded_train = train.fit_encode(encoder_list_for_train)
+            if name in encoders:
+                encoder_list_for_train = encoders.get(name)
+                encoded_train = train.fit_encode(encoder_list_for_train)
+                train_input_sources[name] = encoded_train
+                encoded_val = val and val.encode(encoder_list_for_train)
+                encoded_test = test and test.encode(encoder_list_for_train)
+            else:
+                encoded_train, encoded_val, encoded_test = train, val, test
             train_input_sources[name] = encoded_train
-            val_input_sources[name] = val.encode(encoder_list_for_train)
-            if test is not None:
-                test_input_sources[name] = test.encode(encoder_list_for_train)
-        return train_input_sources, val_input_sources, test_input_sources or None
+            if encoded_val is not None:
+                val_input_sources[name] = encoded_val
+            if encoded_test is not None:
+                test_input_sources[name] = encoded_test
+        return (
+            train_input_sources,
+            val_input_sources or None,
+            test_input_sources or None,
+        )
 
     @validate_arguments(config=ArbitraryTypes)
     def split(self, splitter: TrainValTestSpliter) -> Tuple["DataSet", "DataSet", "DataSet"]:
@@ -608,7 +621,7 @@ class DataSet:
         self,
         splitter: TrainValTestSpliter,
         encoders: Optional[Dict[str, List[DataEncoder]]],
-    ) -> Tuple["DataSet", "DataSet", Optional["DataSet"]]:
+    ) -> Tuple["DataSet", Optional["DataSet"], Optional["DataSet"]]:
         """
         The splitter has to be reproducible, i.e. don't use RandomSplitter without setting the seed.
         Note: you can instantiate RandomSplitter with randomly runtime-selected seed.
@@ -619,8 +632,8 @@ class DataSet:
             train_targets, val_targets, test_targets = self._split_encode_sources_map(self.target_sources, splitter, encoders)
         else:
             train_targets = val_targets = test_targets = None
-        train_ds = DataSet(train_inputs, train_targets)
-        val_ds = DataSet(val_inputs, val_targets)
+        train_ds = train_inputs and DataSet(train_inputs, train_targets)
+        val_ds = val_inputs and DataSet(val_inputs, val_targets)
         test_ds = test_inputs and DataSet(test_inputs, test_targets)
         return train_ds, val_ds, test_ds
 

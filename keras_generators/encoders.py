@@ -1,18 +1,17 @@
 #!/usr/bin/env python
 # Author: ASU --<andrei.suiu@gmail.com>
 from abc import ABC, abstractmethod
-from typing import Callable, Union, Collection, Tuple, List
+from typing import Callable, Collection, List, Tuple, Union
 
 import numpy as np
 import sklearn
-from pyxtension import validate
 from sklearn.preprocessing import (
-    MinMaxScaler,
-    StandardScaler,
-    MaxAbsScaler,
-    RobustScaler,
     Binarizer,
+    MaxAbsScaler,
+    MinMaxScaler,
     PowerTransformer,
+    RobustScaler,
+    StandardScaler,
 )
 
 Scaler = Union[
@@ -78,9 +77,7 @@ class ChainedDataEncoder(DataEncoder):
         return decoded_na
 
     def select_features(self, features_idxs: Collection[int]) -> "ChainedDataEncoder":
-        new_encoders = [
-            encoder.select_features(features_idxs) for encoder in self.encoders
-        ]
+        new_encoders = [encoder.select_features(features_idxs) for encoder in self.encoders]
         return self.__class__(new_encoders)
 
     def clone(self) -> "ChainedDataEncoder":
@@ -88,9 +85,7 @@ class ChainedDataEncoder(DataEncoder):
 
 
 class CompoundDataEncoder(DataEncoder):
-    def __init__(
-        self, encoders: List[DataEncoder], instance_shapes: Collection[Tuple[int, ...]]
-    ) -> None:
+    def __init__(self, encoders: List[DataEncoder], instance_shapes: Collection[Tuple[int, ...]]) -> None:
         self.encoders = encoders
         self.instance_shapes = instance_shapes
 
@@ -132,15 +127,11 @@ class CompoundDataEncoder(DataEncoder):
         return decoded_na
 
     def select_features(self, features_idxs: Collection[int]) -> "DataEncoder":
-        raise NotImplementedError(
-            "select_features() doesn't make much sense for CompoundDataEncoder"
-        )
+        raise NotImplementedError("select_features() doesn't make much sense for CompoundDataEncoder")
 
     def clone(self) -> "CompoundDataEncoder":
         new_encoders = [encoder.clone() for encoder in self.encoders]
-        return self.__class__(
-            encoders=new_encoders, instance_shapes=self.instance_shapes
-        )
+        return self.__class__(encoders=new_encoders, instance_shapes=self.instance_shapes)
 
 
 class ScaleEncoder(DataEncoder):
@@ -154,18 +145,15 @@ class ScaleEncoder(DataEncoder):
         self.scaler = scaler
         self.column_wise = column_wise
 
-    def _transform(
-        self, data: np.ndarray, transformer: Callable[[np.ndarray], np.ndarray]
-    ) -> np.ndarray:
+    def _transform(self, data: np.ndarray, transformer: Callable[[np.ndarray], np.ndarray]) -> np.ndarray:
         na = data
         if self.column_wise:
             if len(na.shape) == 2:
                 return transformer(data)
-            elif len(na.shape) == 3:
+            if len(na.shape) == 3:
                 na_to_norm = na.reshape(na.shape[0] * na.shape[1], na.shape[2])
                 return transformer(na_to_norm).reshape(na.shape)
-            else:
-                raise ValueError(f"Unsupported shape: {na.shape}")
+            raise ValueError(f"Unsupported shape: {na.shape}")
         na_to_norm = na.reshape(na.shape[0], 1)
         return transformer(na_to_norm).reshape(na.shape)
 
@@ -187,15 +175,13 @@ class ScaleEncoder(DataEncoder):
             mean_ = self.scaler.mean_[features_idxs]
             var_ = self.scaler.var_[features_idxs]
             n_samples_seen_ = self.scaler.n_samples_seen_
-            new_scaler = StandardScaler(
-                with_mean=self.scaler.with_mean, with_std=self.scaler.with_std
-            )
+            new_scaler = StandardScaler(with_mean=self.scaler.with_mean, with_std=self.scaler.with_std)
             new_scaler.scale_ = scale_
             new_scaler.mean_ = mean_
             new_scaler.var_ = var_
             new_scaler.n_samples_seen_ = n_samples_seen_
             return ScaleEncoder(new_scaler, self.column_wise)
-        elif isinstance(self.scaler, MinMaxScaler):
+        if isinstance(self.scaler, MinMaxScaler):
             scale_ = self.scaler.scale_[features_idxs]
             min_ = self.scaler.min_[features_idxs]
             n_samples_seen_ = self.scaler.n_samples_seen_
@@ -226,7 +212,8 @@ class PeriodEncoder(DataEncoder):
     """
 
     def __init__(self, period: float) -> None:
-        validate(period > 0, "Period must be positive")
+        if not period > 0:
+            raise ValueError("Period must be positive")
         self._period = period
 
     def fit_encode(self, data: np.ndarray) -> np.ndarray:
@@ -259,9 +246,7 @@ class DayOfWeekEncoder(DataEncoder):
     """
 
     def encode(self, data: np.ndarray) -> np.ndarray:
-        dow_na = (
-            np.floor_divide(data - _FIRST_MONDAY_TS_MS, _DAY_MS).astype(np.int64) % 7
-        )
+        dow_na = np.floor_divide(data - _FIRST_MONDAY_TS_MS, _DAY_MS).astype(np.int64) % 7
         return dow_na
 
     def decode(self, data: np.ndarray) -> np.ndarray:
