@@ -103,33 +103,46 @@ class SimpleModelObject(ModelObject):
         callbacks: Union[List[Callback], Tuple[Callback, ...]] = (),
         verbose=1,
         model_dir: Optional[Path] = None,
+        add_default_callbacks: bool = True,
     ) -> History:
         model_dir.mkdir(parents=True, exist_ok=True)
         mp = self.mp
         _callbacks = list(callbacks)
-        if mp.rop_patience is not None:
-            rop = ReduceLROnPlateau(factor=0.5, patience=mp.rop_patience, verbose=1, cooldown=0, min_lr=5e-05)
-            _callbacks.append(rop)
-        if mp.early_stop_patience is not None:
-            early_stopping = EarlyStopping(patience=mp.early_stop_patience, min_delta=0.0001)
-            _callbacks.append(early_stopping)
+        if add_default_callbacks:
+            if mp.rop_patience is not None:
+                rop = ReduceLROnPlateau(
+                    factor=0.5,
+                    patience=mp.rop_patience,
+                    verbose=1,
+                    cooldown=0,
+                    min_lr=5e-05,
+                )
+                _callbacks.append(rop)
+            if mp.early_stop_patience is not None:
+                early_stopping = EarlyStopping(patience=mp.early_stop_patience, min_delta=0.0001)
+                _callbacks.append(early_stopping)
+
+            metrics_checkpoint = MetricCheckpoint(model_dir)
+            _callbacks.append(metrics_checkpoint)
+
+            csv_logger = CSVLogger(filename=str(model_dir / "metrics.csv"), append=True)
+            _callbacks.append(csv_logger)
+
+            path_pattern = model_dir / "weights_e{epoch:03d}_tl{loss:.8f}_vl{val_loss:.8f}.hdf5"
+            checkpoint = ModelCheckpoint(
+                str(path_pattern),
+                monitor="val_loss",
+                verbose=1,
+                save_best_only=False,
+                save_weights_only=False,
+            )
+            _callbacks.append(checkpoint)
 
         mp.serialize_to_file(model_dir / "mp.json")
         self.save_scalers(model_dir)
-
-        path_pattern = model_dir / "weights_e{epoch:03d}_tl{loss:.8f}_vl{val_loss:.8f}.hdf5"
-        checkpoint = ModelCheckpoint(str(path_pattern), monitor="val_loss", verbose=1, save_best_only=False, save_weights_only=False)
-        _callbacks.append(checkpoint)
-
-        metrics_checkpoint = MetricCheckpoint(model_dir)
-        _callbacks.append(metrics_checkpoint)
-
-        csv_logger = CSVLogger(filename=str(model_dir / "metrics.csv"), append=True)
-        _callbacks.append(csv_logger)
-
-        try:
-            with tf.device(device):
-                logging.info(f"Starting training with mp: {mp!s}")
+        with tf.device(device):
+            logging.info(f"Starting training with mp: {mp!s}")
+            try:
                 history = self.model.fit(
                     train_gen,
                     epochs=mp.max_epochs,
@@ -138,14 +151,15 @@ class SimpleModelObject(ModelObject):
                     steps_per_epoch=mp.steps_per_epoch,
                     verbose=verbose,
                 )
-        except Exception:
-            # Next callbacks do not close their files in case the train fails
-            for cb in [csv_logger, metrics_checkpoint]:
-                try:
-                    cb.on_train_end(None)
-                except Exception:  # pylint: disable=broad-except
-                    pass
-            raise
+            except Exception:  # pylint: disable=broad-except
+                if _callbacks:
+                    # Next callbacks do not close their files in case the train fails
+                    for cb in _callbacks:
+                        try:
+                            cb.on_train_end(None)
+                        except Exception:  # pylint: disable=broad-except
+                            pass
+                    raise
         return history
 
     def save_scalers(self, model_dir: Path):
@@ -156,7 +170,11 @@ class SimpleModelObject(ModelObject):
 
     @classmethod
     def from_model_dir(
-        cls, hdf5_path: Path, model_params_cls: Type[ModelParams], device: str = "/CPU:0", custom_classes: Optional[List[Any]] = None
+        cls,
+        hdf5_path: Path,
+        model_params_cls: Type[ModelParams],
+        device: str = "/CPU:0",
+        custom_classes: Optional[List[Any]] = None,
     ):
         model_dir = hdf5_path.parent
         mp = model_params_cls.from_file(model_dir / "mp.json")

@@ -108,7 +108,7 @@ class TensorDataSource(DataSource):
     def as_numpy(self) -> np.ndarray:
         return self.tensors
 
-    def _get_ds_from_split(self, tensors: Union[np.ndarray, Sequence[np.ndarray]]) -> Optional[TensorDataSource]:
+    def _get_ds_from_split(self, tensors: Optional[Sequence[np.ndarray]]) -> Optional[TensorDataSource]:
         if not len(tensors):  # pylint: disable=use-implicit-booleaness-not-len
             return None
         if not isinstance(tensors, np.ndarray):
@@ -118,7 +118,7 @@ class TensorDataSource(DataSource):
     @validate_arguments(config=ArbitraryTypes)
     def split(
         self, splitter: TrainValTestSpliter
-    ) -> Tuple[Optional[TensorDataSource], Optional[TensorDataSource], Optional[TensorDataSource],]:
+    ) -> Tuple[Optional[TensorDataSource], Optional[TensorDataSource], Optional[TensorDataSource]]:
         train, val, test = splitter.split(self.tensors)
         train_ds = self._get_ds_from_split(train)
         val_ds = self._get_ds_from_split(val)
@@ -280,7 +280,7 @@ class TimeseriesDataSource(TensorDataSource):
     @validate_arguments(config=ArbitraryTypes)
     def split(
         self, splitter: TrainValTestSpliter
-    ) -> Tuple["TimeseriesDataSource", Optional["TimeseriesDataSource"], Optional["TimeseriesDataSource"],]:
+    ) -> Tuple["TimeseriesDataSource", Optional["TimeseriesDataSource"], Optional["TimeseriesDataSource"]]:
         """For the moment it supports only OrderedSplitter, as this it TimeSeries"""
         assert isinstance(splitter, OrderedSplitter)
         instance_idxes = np.arange(self.size)
@@ -606,11 +606,7 @@ class DataSet:
                 val_input_sources[name] = encoded_val
             if encoded_test is not None:
                 test_input_sources[name] = encoded_test
-        return (
-            train_input_sources,
-            val_input_sources or None,
-            test_input_sources or None,
-        )
+        return train_input_sources, val_input_sources or None, test_input_sources or None
 
     @validate_arguments(config=ArbitraryTypes)
     def split(self, splitter: TrainValTestSpliter) -> Tuple["DataSet", "DataSet", "DataSet"]:
