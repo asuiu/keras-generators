@@ -19,6 +19,7 @@ from keras.callbacks import (
     ModelCheckpoint,
     ReduceLROnPlateau,
 )
+from tsx import TS
 
 from ..callbacks import MetricCheckpoint
 from ..encoders import DataEncoder
@@ -89,7 +90,7 @@ class ModelObject(ABC):
 
     @staticmethod
     def construct_model_dir(name: str, base_dir: Union[str, Path] = "model-data") -> Path:
-        model_save_name = f'{name}-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+        model_save_name = f'{TS.now().as_file_ts}-{name}'
         model_dir = (Path(base_dir).absolute()) / model_save_name
         return model_dir
 
