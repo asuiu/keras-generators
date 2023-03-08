@@ -35,10 +35,58 @@ class TestDataSet(TestCase):
         ds_test = DataSet(input_sources=dsources)
         splitter = OrderedSplitter()
         train, val, test = ds_test.split_encode(splitter, encoders=encoders)
-        ds1_orig = np.array(train.input_sources["ds1"].decode())
+        ds1_train_orig = np.array(train.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_train_orig, ds1[:6])
+        ds1_val_orig = np.array(val.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_val_orig, ds1[6:8])
+        ds1_test_orig = np.array(test.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_test_orig, ds1[8:])
+        ds2_train_orig = np.array(train.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_train_orig, dsource2.tensors[:6])
+        ds2_val_orig = np.array(val.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_val_orig, dsource2.tensors[6:8])
+        ds2_test_orig = np.array(test.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_test_orig, dsource2.tensors[8:])
+        ds3_train_orig = np.array(train.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_train_orig, dsource3.tensors[:6])
+        ds3_val_orig = np.array(val.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_val_orig, dsource3.tensors[6:8])
+        ds3_test_orig = np.array(test.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_test_orig, dsource3.tensors[8:])
 
-        self.assertTrue(np.array_equal(ds1_orig, ds1[:6]))
+    def test_split_encode_reversed(self):
+        ds1 = np.arange(20).reshape((10, 2)).astype(float)
+        dsource1 = TensorDataSource("ds1", ds1)
+        dsource2 = TensorDataSource("ds2", np.arange(70).reshape((10, 7)).astype(float))
+        dsource3 = TensorDataSource("ds3", np.arange(60).reshape((10, 3, 2)).astype(float))
+        dsources = {ds.name: ds for ds in [dsource1, dsource2, dsource3]}
+        encoders = {
+            "ds1": [ScaleEncoder(scaler=StandardScaler())],
+            "ds2": [ScaleEncoder(scaler=StandardScaler())],
+            "ds3": [ScaleEncoder(scaler=StandardScaler())],
+        }
+        ds_test = DataSet(input_sources=dsources)
+        splitter = OrderedSplitter(reverse=True)
+        train, val, test = ds_test.split_encode(splitter, encoders=encoders)
 
+        ds1_train_orig = np.array(train.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_train_orig, ds1[4:])
+        ds1_val_orig = np.array(val.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_val_orig, ds1[2:4])
+        ds1_test_orig = np.array(test.input_sources["ds1"].decode())
+        np.testing.assert_array_almost_equal(ds1_test_orig, ds1[:2])
+        ds2_train_orig = np.array(train.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_train_orig, dsource2.tensors[4:])
+        ds2_val_orig = np.array(val.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_val_orig, dsource2.tensors[2:4])
+        ds2_test_orig = np.array(test.input_sources["ds2"].decode())
+        np.testing.assert_array_almost_equal(ds2_test_orig, dsource2.tensors[:2])
+        ds3_train_orig = np.array(train.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_train_orig, dsource3.tensors[4:])
+        ds3_val_orig = np.array(val.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_val_orig, dsource3.tensors[2:4])
+        ds3_test_orig = np.array(test.input_sources["ds3"].decode())
+        np.testing.assert_array_almost_equal(ds3_test_orig, dsource3.tensors[:2])
 
 class TestTensorDataSource(TestCase):
     def test_fit_encode(self):

@@ -16,19 +16,26 @@ class TrainValTestSpliter(ABC):
 
 
 class OrderedSplitter(TrainValTestSpliter):
-    def __init__(self, train: float = 0.6, val: float = 0.2) -> None:
+    def __init__(self, train: float = 0.6, val: float = 0.2, reverse: bool = False) -> None:
         assert train + val <= 1.0
         self._train = train
         self._val = val
+        self._reverse = reverse
 
     def split(self, instances: Sequence[np.ndarray]) \
             -> Tuple[Sequence[np.ndarray], Sequence[np.ndarray], Sequence[np.ndarray]]:
         n_instances = len(instances)
         n_train = int(n_instances * self._train)
         n_val = int(n_instances * self._val)
-        train_instances = instances[:n_train]
-        val_instances = instances[n_train:n_train + n_val]
-        test_instances = instances[n_train + n_val:]
+        n_test = n_instances - n_train - n_val
+        if self._reverse:
+            test_instances = instances[:n_test]
+            val_instances = instances[n_test:n_test + n_val]
+            train_instances = instances[n_test + n_val:]
+        else:
+            train_instances = instances[:n_train]
+            val_instances = instances[n_train:n_train + n_val]
+            test_instances = instances[n_train + n_val:]
         return train_instances, val_instances, test_instances
 
     def is_reproducible(self) -> bool:
