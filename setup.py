@@ -1,13 +1,30 @@
 # pylint: disable=deprecated-module
+import logging
 from distutils.core import setup
 from pathlib import Path
+from typing import List
 
+try:
+    from pip._internal.network.session import PipSession
+    from pip._internal.req import parse_requirements
+except ImportError:
+    logging.CRITICAL("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
+    raise ImportError("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
 from setuptools import find_packages
 
-VERSION = "1.2.6"
+VERSION = "1.3.0"
 
-this_file = Path(__file__).resolve()
-readme = this_file.parent / "README.md"
+
+def get_requirements(requirements_file: Path) -> List[str]:
+    reqs = parse_requirements(str(requirements_file), session=PipSession())
+    requirements = [str(req.requirement) for req in reqs if req.requirement is not None]
+    return requirements
+
+
+ROOT = Path(__file__).resolve().parent
+readme = ROOT / "README.md"
+
+requirements = get_requirements(ROOT / "requirements.txt")
 
 setup(
     name="keras-generators",
@@ -20,14 +37,7 @@ setup(
     author_email="andrei.suiu@gmail.com",
     url="https://github.com/asuiu/keras-generators",
     keywords=["ML", "DataGenerators", "Keras", "tensorflow"],
-    install_requires=[
-        "packaging",
-        "tensorflow>=2.8.0",
-        "scikit-learn>=0.22.2",
-        "numpy>=1.20",
-        "pydantic>=1.10.2",
-        "tsx>=0.0.4",
-    ],
+    install_requires=requirements,
     extras_require={
         "tests": [],
     },

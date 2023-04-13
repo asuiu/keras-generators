@@ -5,13 +5,12 @@ import json
 from pathlib import Path
 from typing import Optional, List
 
-from pydantic import constr, conint, PositiveInt, confloat, Extra
+from pydantic import constr, conint, PositiveInt, confloat
+from pyxtension.models import ImmutableExtModel
 from typing_extensions import Literal
 
-from ..common import SerializableImmutableStruct
 
-
-class ModelParams(SerializableImmutableStruct):
+class ModelParams(ImmutableExtModel):
     """
     This class is a base class used to encode the parameters of a model.
     It's easy serializable and deserializable to/from a file.
@@ -46,12 +45,9 @@ class ModelParams(SerializableImmutableStruct):
     input_name: str = "input"  # Name of the main input layer
     target_name: str = "target"  # Name of the main target layer
 
-    class Config:
-        extra = Extra.forbid
-
     def get_config(self):
         """Returns the config dictionary for a `ModelParams` instance."""
-        return {"data": json.dumps(self.dict())}
+        return {"data": self.json()}
 
     def __repr__(self) -> str:
         str_repr = self.__repr_str__(",\n")

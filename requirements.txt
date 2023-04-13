@@ -6,4 +6,4 @@ setuptools>=63.4.1
 tensorflow>=2.8.0
 tsx>=0.1.1
 wheel>=0.37.1
-# protobuf==3.20.* # Bug in protobuf 4.x generates TF loading issues: https://stackoverflow.com/questions/72441758/typeerror-descriptors-cannot-not-be-created-directly
+pyxtension>=1.15.0
