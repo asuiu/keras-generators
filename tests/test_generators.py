@@ -631,7 +631,7 @@ class TestXYWBatchGenerator(TestCase):
             dsource3.name: [ScaleEncoder(scaler=MinMaxScaler())],
         }
         ds_test = DataSet(input_sources=dsources, target_sources={dsource3.name: dsource3})
-        sample_weights = np.ones((rows, 1))
+        sample_weights = np.arange(rows)
         weights = {"weights": TensorDataSource("weights", tensors=sample_weights)}
 
         splitter = OrderedSplitter()
