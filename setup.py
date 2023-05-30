@@ -12,7 +12,7 @@ except ImportError:
     raise ImportError("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
 from setuptools import find_packages
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 
 
 def get_requirements(requirements_file: Path) -> List[str]:

@@ -768,3 +768,74 @@ class XYBatchGenerator(XBatchGenerator):
     def get_X_generator(self, batch_size: Optional[int] = None) -> XBatchGenerator:
         batch_size = batch_size or self.batch_size
         return XBatchGenerator(self.inputs, batch_size)
+
+
+class XYWBatchGenerator(XYBatchGenerator):
+    @validate_arguments(config=ArbitraryTypes)
+    def __init__(
+        self,
+        inputs_map: Dict[str, DataSource],
+        targets_map: Dict[str, DataSource],
+        weight_map: Dict[str, DataSource],
+        shuffle: bool = True,
+        batch_size: int = 128,
+    ):
+        super().__init__(inputs_map=inputs_map, targets_map=targets_map, shuffle=shuffle, batch_size=batch_size)
+        self.weights = weight_map
+
+    @validate_arguments
+    def _get_batch(self, start_index: int, end_index: int) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+        inputs = {}
+        rows = None
+        if self.shuffle:
+            rows = self._shuffle_index[start_index:end_index]
+
+        for k, input_seq in self.inputs.items():
+            if self.shuffle:
+                inputs[k] = input_seq.get_by_idx_set(rows)
+            else:
+                inputs[k] = input_seq[start_index:end_index]
+        targets = {}
+        for k, target_seq in self.targets.items():
+            if self.shuffle:
+                targets[k] = target_seq.get_by_idx_set(rows)
+            else:
+                targets[k] = target_seq[start_index:end_index]
+
+        weights = {}
+        for k, weight_seq in self.weights.items():
+            if self.shuffle:
+                weights[k] = weight_seq.get_by_idx_set(rows)
+            else:
+                weights[k] = weight_seq[start_index:end_index]
+
+        return inputs, targets, weights
+
+    def get_config(self):
+        """Returns the configuration of the generator.
+        A generator's configuration is the keyword arguments
+        given to `__init__`.
+
+        # Returns
+            A dictionary.
+        """
+        return {
+            "inputs": json.dumps(self.inputs, cls=NumpyArrayEncoder),
+            "targets": json.dumps(self.targets, cls=NumpyArrayEncoder),
+            "weights": json.dumps(self.weights, cls=NumpyArrayEncoder),
+            "sampling_rate": self.sampling_rate,
+            "shuffle": self.shuffle,
+            "batch_size": self.batch_size,
+        }
+
+    def __add__(self, other: "XYWBatchGenerator") -> "XYWBatchGenerator":
+        inputs = {k: v + other.inputs[k] for k, v in self.inputs.items()}
+        targets = {k: v + other.targets[k] for k, v in self.targets.items()}
+        weights = {k: v + other.weight_map[k] for k, v in self.weights.items()}
+        return self.__class__(
+            inputs_map=inputs,
+            targets_map=targets,
+            weight_map=weights,
+            shuffle=self.shuffle,
+            batch_size=self.batch_size,
+        )

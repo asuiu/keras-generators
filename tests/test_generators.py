@@ -16,6 +16,7 @@ from keras_generators.generators import (
     TimeseriesDataSource,
     TimeseriesTargetsParams,
     XYBatchGenerator,
+    XYWBatchGenerator,
 )
 from keras_generators.splitters import OrderedSplitter
 
@@ -87,6 +88,7 @@ class TestDataSet(TestCase):
         np.testing.assert_array_almost_equal(ds3_val_orig, dsource3.tensors[2:4])
         ds3_test_orig = np.array(test.input_sources["ds3"].decode())
         np.testing.assert_array_almost_equal(ds3_test_orig, dsource3.tensors[:2])
+
 
 class TestTensorDataSource(TestCase):
     def test_fit_encode(self):
@@ -611,6 +613,42 @@ class TestXYBatchGenerator(TestCase):
         np.testing.assert_array_almost_equal(expected_batch[0]["ds1"], batch[0]["ds1"])
         np.testing.assert_array_almost_equal(expected_batch[0]["ds2"], batch[0]["ds2"])
         np.testing.assert_array_almost_equal(expected_batch[1]["ds3"], batch[1]["ds3"])
+
+
+class TestXYWBatchGenerator(TestCase):
+    def test_on_epoch_end(self):
+        rows, cols = 10, 2
+        na = np.arange(rows * cols, dtype=np.float64).reshape((rows, cols))
+        dsource1 = TensorDataSource("ds1", na)
+        na2 = np.arange(rows * 3, dtype=np.float64).reshape((rows, 3))
+        dsource2 = TensorDataSource("ds2", na2)
+        na3 = np.arange(rows * 2, dtype=np.float64).reshape((rows, 2))
+        dsource3 = TensorDataSource("ds3", na3)
+        dsources = {ds.name: ds for ds in [dsource1, dsource2]}
+        encoders = {
+            dsource1.name: [ScaleEncoder(scaler=MinMaxScaler())],
+            dsource2.name: [ScaleEncoder(scaler=MinMaxScaler())],
+            dsource3.name: [ScaleEncoder(scaler=MinMaxScaler())],
+        }
+        ds_test = DataSet(input_sources=dsources, target_sources={dsource3.name: dsource3})
+        sample_weights = np.arange(rows)
+        weights = {"weights": TensorDataSource("weights", tensors=sample_weights)}
+
+        splitter = OrderedSplitter()
+        train, val, test = ds_test.split_encode(splitter, encoders=encoders)
+        xyw_gen = XYWBatchGenerator(train.input_sources, train.target_sources, weights, batch_size=2, shuffle=False)
+        batch = xyw_gen[np.int32(0)]
+        expected_batch = (
+            {
+                "ds1": array([[0.0, 0.0], [0.2, 0.2]]),
+                "ds2": array([[0.0, 0.0, 0.0], [0.2, 0.2, 0.2]]),
+            },
+            {"ds3": array([[0.0, 0.0], [0.2, 0.2]])},
+        )
+        np.testing.assert_array_almost_equal(expected_batch[0]["ds1"], batch[0]["ds1"])
+        np.testing.assert_array_almost_equal(expected_batch[0]["ds2"], batch[0]["ds2"])
+        np.testing.assert_array_almost_equal(expected_batch[1]["ds3"], batch[1]["ds3"])
+        np.testing.assert_array_almost_equal(batch[2]["weights"], sample_weights[0:2])
 
 
 if __name__ == "__main__":
