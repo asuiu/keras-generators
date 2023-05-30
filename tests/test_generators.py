@@ -89,6 +89,7 @@ class TestDataSet(TestCase):
         ds3_test_orig = np.array(test.input_sources["ds3"].decode())
         np.testing.assert_array_almost_equal(ds3_test_orig, dsource3.tensors[:2])
 
+
 class TestTensorDataSource(TestCase):
     def test_fit_encode(self):
         na = np.array(
@@ -613,6 +614,7 @@ class TestXYBatchGenerator(TestCase):
         np.testing.assert_array_almost_equal(expected_batch[0]["ds2"], batch[0]["ds2"])
         np.testing.assert_array_almost_equal(expected_batch[1]["ds3"], batch[1]["ds3"])
 
+
 class TestXYWBatchGenerator(TestCase):
     def test_on_epoch_end(self):
         rows, cols = 10, 2
@@ -646,7 +648,7 @@ class TestXYWBatchGenerator(TestCase):
         np.testing.assert_array_almost_equal(expected_batch[0]["ds1"], batch[0]["ds1"])
         np.testing.assert_array_almost_equal(expected_batch[0]["ds2"], batch[0]["ds2"])
         np.testing.assert_array_almost_equal(expected_batch[1]["ds3"], batch[1]["ds3"])
-        np.testing.assert_array_almost_equal(batch[2]['weights'], sample_weights[0:2])
+        np.testing.assert_array_almost_equal(batch[2]["weights"], sample_weights[0:2])
 
 
 if __name__ == "__main__":
