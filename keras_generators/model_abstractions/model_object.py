@@ -5,7 +5,6 @@ import gzip
 import logging
 import pickle
 from abc import ABC
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -19,6 +18,7 @@ from keras.callbacks import (
     ModelCheckpoint,
     ReduceLROnPlateau,
 )
+import keras.backend as K
 from tsx import TS
 
 from ..callbacks import MetricCheckpoint
@@ -33,10 +33,26 @@ class ModelObject(ABC):
         mp: ModelParams,
         model: Model,
         encoders: Dict[str, List[DataEncoder]],
+        state_autoclear: int = 128,
     ) -> None:
+        """
+        :param mp: the model parameters
+        :param model: the keras model
+        :param encoders: the encoders used to encode/decode the data
+        :param state_autoclear: the number of calls to predict/evaluate methods after which the keras session is cleared
+        """
         self.mp = mp
         self.model = model
         self.encoders = encoders
+        self._state_autoclear = state_autoclear
+        self._state_calls = 0
+
+    def _check_clear_state(self):
+        self._state_calls += 1  # since it's an atomic operation, it's thread safe due to GIL
+        if self._state_calls >= self._state_autoclear:
+            K.clear_session()
+            logging.debug(f"Cleared keras session after {self._state_calls} calls to predict methods")
+            self._state_calls = 0
 
     def train(
         self,
@@ -67,6 +83,7 @@ class ModelObject(ABC):
             res = self.model.predict(x)
         res_ds = TensorDataSource(name="prediction", tensors=res, encoders=self.encoders[self.mp.target_name])
         decoded = res_ds.decode()
+        self._check_clear_state()
         return decoded
 
     def predict_raw(self, raw_input_sources: Dict[str, DataSource], device: str = "/CPU:0") -> DataSource:
@@ -86,6 +103,7 @@ class ModelObject(ABC):
         scaled_xy = XYBatchGenerator(scaled_inputs, scaled_targets, shuffle=False, batch_size=xy.batch_size)
         with tf.device(device):
             res = self.model.evaluate(scaled_xy)
+        self._check_clear_state()
         return {self.model.metrics_names[i]: v for i, v in enumerate(res)}
 
     @staticmethod
