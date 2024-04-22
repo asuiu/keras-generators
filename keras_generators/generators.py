@@ -10,9 +10,9 @@ from collections import defaultdict
 from typing import Collection, Dict, ForwardRef, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import tf_keras
 from pydantic import PositiveInt, conint, validate_arguments
 from pydantic.dataclasses import dataclass
-from tensorflow.python.keras.utils import data_utils
 
 from .common import ArbitraryTypes, ImmutableConfig, NumpyArrayEncoder
 from .encoders import ChainedDataEncoder, CompoundDataEncoder, DataEncoder
@@ -640,7 +640,7 @@ class DataSet:
         return all_encoders
 
 
-class XBatchGenerator(data_utils.Sequence):
+class XBatchGenerator(tf_keras.utils.Sequence):
     @validate_arguments(config=ArbitraryTypes)
     def __init__(self, inputs_map: Dict[str, DataSource], batch_size: PositiveInt = 128):
         self.inputs = inputs_map

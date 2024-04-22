@@ -3,11 +3,10 @@
 
 import json
 from pathlib import Path
-from typing import Optional, List
+from typing import Annotated, List, Literal, Optional
 
-from pydantic import constr, conint, PositiveInt, confloat
+from pydantic import Field, PositiveInt, StringConstraints
 from pyxtension.models import ImmutableExtModel
-from typing_extensions import Literal
 
 
 class ModelParams(ImmutableExtModel):
@@ -21,26 +20,26 @@ class ModelParams(ImmutableExtModel):
         - add different versions of the ModelParams
         - etc.
     """
-    version: constr(regex=r"^v1\.0\.0$", strict=True) = "v1.0.0"
 
-    batch_size: conint(ge=-1) = 64
+    version: Annotated[str, StringConstraints(pattern=r"^v1\.0\.0$", strict=True)] = "v1.0.0"
+
+    batch_size: Annotated[int, Field(strict=True, ge=-1)] = 64
     val_batch_size: PositiveInt = 64
-    train_size_ratio: confloat(ge=0, le=1) = 0.6
-    val_size_ratio: confloat(ge=0, le=1) = 0.2
-    split_policy: Literal["random", "sequential"] = 'random'  # The policy for splitting dataset
+    train_size_ratio: Annotated[float, Field(ge=0, le=1)] = 0.6
+    val_size_ratio: Annotated[float, Field(ge=0, le=1)] = 0.2
+    split_policy: Literal["random", "sequential"] = "random"  # The policy for splitting dataset
 
     # Maximum number of epochs to train the model
     max_epochs: PositiveInt = 100
 
     # Total number of steps (batches of samples) before declaring one epoch finished and starting the next epoch.
     steps_per_epoch: Optional[int] = None
-    early_stop_patience: Optional[
-        PositiveInt] = None  # The number of epochs with no improvement after which training will be stopped
+    early_stop_patience: Optional[PositiveInt] = None  # The number of epochs with no improvement after which training will be stopped
     rop_patience: Optional[PositiveInt] = None  # Reduce on plateau patience
-    learning_rate: confloat(ge=0, le=1) = 0.003
+    learning_rate: Annotated[float, Field(ge=0, le=1)] = 0.003
 
-    loss: Literal['mse'] = 'mse'
-    metrics: List[Literal['mse']] = ['mse']
+    loss: Literal["mse"] = "mse"
+    metrics: List[Literal["mse"]] = ["mse"]
 
     input_name: str = "input"  # Name of the main input layer
     target_name: str = "target"  # Name of the main target layer
@@ -74,7 +73,7 @@ class ModelParams(ImmutableExtModel):
         return cls(**d)
 
     @classmethod
-    def from_file(cls, fpath: Path) -> 'ModelParams':
+    def from_file(cls, fpath: Path) -> "ModelParams":
         with fpath.open("rt") as f:
             d = json.load(f)
             mp = cls(**d)

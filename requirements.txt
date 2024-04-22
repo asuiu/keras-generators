@@ -1,9 +1,11 @@
+cloudpickle>=3.0.0
 numpy>=1.20
 pip>=22.1.2
 pydantic>=2.0
+pyxtension>=1.15.0
 scikit-learn>=0.22.2
 setuptools>=63.4.1
 tensorflow>=2.16
+tf-keras>=2.16.0
 tsx>=0.1.1
 wheel>=0.37.1
-pyxtension>=1.15.0

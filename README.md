@@ -146,3 +146,125 @@ y_pred = model.predict(test_gen.get_X_generator())
 res_ds = TensorDataSource(name="prediction", tensors=y_pred, encoders=targets_ds.get_encoders())
 unscaled_y_pred = res_ds.decode()[:]
 ```
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+## [1.4.1] - 2024-04-22
+v1.4.1:
+- Drops support <3.10 in setup.py
+- Upgrade ModelParams to use pydantic>=2.*
+- Proper serialization of Callbacks using cloudpickle + dependency on cloudpickle
+- Added common SerializableKerasObject
+- Use legacy Keras (2.*) instead of the new 3.0 by explicitly importing tf_keras lib
+- Integration tests for Callback serialization
+
+
+## [1.4.0] - 2024-04-22
+### Added
+- Upgrade to support TensorFlow 2.16, Python 3.12.
+
+### Removed
+- Drop support for Python versions < 3.10.
+- Drop support for TensorFlow versions < 2.16.
+- Drop support for pydantic 1.x.
+
+## [1.3.2] - 2023-12-01
+### Added
+- Added `state_autoclear` option to `ModelObject` as a workaround to memory leaks in Keras; it automatically calls `K.clear_session()` once every N calls to predict/evaluate.
+
+## [1.3.1] - 2023-05-30
+### Added
+- Added `XYWBatchGenerator` to handle sample weights.
+
+## [1.3.0] - 2023-04-13
+### Changed
+- `ModelParams` now inherit `ImmutableExtModel` from pyxtension.
+- Removed unused custom Models from common.
+
+## [1.2.6] - 2023-03-08
+### Changed
+- Model directory name will now be prefixed with 'TS' instead of suffixed.
+
+## [1.2.5] - 2023-03-08
+### Added
+- Added "reverse" option to `OrderedSplitter`.
+
+## [1.2.4] - 2023-01-15
+### Added
+- Added `add_default_callbacks` parameter to `ModelObject.train()`.
+
+## [1.2.3] - 2023-01-05
+### Added
+- Now accepts empty validation and test in data split.
+
+## [1.2.2] - 2022-12-30
+### Removed
+- Removed fixed protobuf dependency due to TensorFlow upgrade.
+
+## [1.2.1] - 2022-12-29
+### Added
+- Major improvements and bug fixes in `CompoundDataSource`.
+
+## [1.2.0] - 2022-12-14
+### Added
+- Added `callbacks.py`, various data encoders, and unchain functionality for `CompoundDataSource`.
+- Added `predict_raw`, `evaluate_raw` methods and `MetrickCheckpoint` as default callback to `SimpleModelObject`.
+- Code reformat with black.
+
+## [1.1.9] - 2022-09-25
+### Added
+- Added `ChainedDataEncoder` and `CompoundDataEncoder`.
+- Fixed `CompoundDataSource` to use new encoders.
+
+## [1.1.8] - 2022-09-25
+### Changed
+- Extended `TensorsDataSource.__getitem__` to accept numpy int indexing.
+
+## [1.1.7] - 2022-09-25
+### Fixed
+- Bugfix for generators.
+
+## [1.1.6] - 2022-09-25
+### Added
+- Added `CompoundDataSource`.
+
+## [1.1.5] - 2022-09-24
+### Added
+- Added `DataSet.get_encoders()` and `split()` methods.
+- Improved typing annotations.
+- Added usage example to README.
+
+## [1.1.4] - 2022-09-24
+### Fixed
+- Regression in `SimpleModelObject.from_model_dir()`.
+- Adjusted example to save and load trained model to/from disk.
+
+## [1.1.3] - 2022-09-24
+### Added
+- Added `TargetTimeseriesDataSource`, default layer names to `ModelParams`, and `DataSource.select_features()`.
+
+## [1.1.2] - 2022-09-21
+### Changed
+- TimeseriesDataSource.get_targets() now returns `TensorDataSource`.
+- Moved several classes to common.py.
+- Updated README.md with the motivation of the library.
+
+## [1.1.1] - 2022-09-21
+### Added
+- Added model abstractions (ModelParams & ModelObject).
+- Added examples with model training using keras-generators.
+
+## [1.1.0] - 2022-09-21
+### Added
+- Introduced data encoders, DataSource based generators, and adapted existing Splitters to new class architecture.
+
+## [1.0.2] - 2022-09-02
+### Fixed
+- Fixed imports for compatibility with breaking changes in TensorFlow 2.9.
+
+## [1.0.1] - 2022-09-01
+### Initial
+- First commit with initial functionality.
+
+## [1.0.0] - 2022-09

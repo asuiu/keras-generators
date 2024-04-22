@@ -1,17 +1,18 @@
 import json
 import logging
 import math
-import pickle
 from json import JSONEncoder
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from keras.callbacks import Callback, ReduceLROnPlateau, CSVLogger, TensorBoard
 from tensorflow.python.util.tf_export import keras_export
+from tf_keras.callbacks import Callback, CSVLogger, ReduceLROnPlateau, TensorBoard
+
+from keras_generators.common import SerializableKerasObject
 
 
-class EarlyStoppingAtMinLoss(Callback):
+class EarlyStoppingAtMinLoss(Callback, SerializableKerasObject):
     """Stop training when the loss is at its min, i.e. the loss stops decreasing.
 
     Arguments:
@@ -45,9 +46,7 @@ class EarlyStoppingAtMinLoss(Callback):
     def _stop_train(self, epoch, message: str = ""):
         self.stopped_epoch = epoch
         self.model.stop_training = True
-        logging.info(
-            "Restoring model weights from the end of the best epoch. %s", message
-        )
+        logging.info("Restoring model weights from the end of the best epoch. %s", message)
         logging.warning(message)
         if self.best_weights is not None:
             self.model.set_weights(self.best_weights)
@@ -59,9 +58,7 @@ class EarlyStoppingAtMinLoss(Callback):
             print(f"No val_loss yet: {logs!s}")
             return
         if current - train_loss > self.loss_max_diff:
-            self._stop_train(
-                epoch, f"Stopping because loss difference {current - train_loss}"
-            )
+            self._stop_train(epoch, f"Stopping because loss difference {current - train_loss}")
         if math.isnan(current):
             self._stop_train(epoch)
         if np.less(current, self.best):
@@ -80,16 +77,14 @@ class EarlyStoppingAtMinLoss(Callback):
 
     def on_train_end(self, *_a, **_k):
         if self.stopped_epoch > 0:
-            print("Epoch %05d: early stopping" % (self.stopped_epoch + 1))
+            logging.warning("Epoch %05d: early stopping", self.stopped_epoch + 1)
 
 
-class MetricCheckpoint(Callback):
+class MetricCheckpoint(Callback, SerializableKerasObject):
     FNAME = "metrics.jsonl"
 
     def on_train_begin(self, *_args, **_kwargs):
-        self._f = open(
-            self._dir / self.FNAME, "at"
-        )  # pylint: disable=consider-using-with
+        self._f = open(self._dir / self.FNAME, "at", encoding="utf-8")  # pylint: disable=consider-using-with
 
     def __init__(self, model_dir: Path):
         super().__init__()
@@ -102,8 +97,7 @@ class MetricCheckpoint(Callback):
             self._je.encode(obj)
         except TypeError:
             return float(obj)
-        else:
-            return obj
+        return obj
 
     def on_epoch_end(self, epoch, logs=None):
         if logs is not None:
@@ -117,88 +111,15 @@ class MetricCheckpoint(Callback):
 
 
 @keras_export("keras.callbacks.SerializableReduceLROnPlateau")
-class SerializableReduceLROnPlateau(ReduceLROnPlateau):
-    def serialize(self) -> bytes:
-        kwargs = {
-            "monitor": self.monitor,
-            "factor": self.factor,
-            "patience": self.patience,
-            "verbose": self.verbose,
-            "mode": self.mode,
-            "min_delta": self.min_delta,
-            "cooldown": self.cooldown,
-            "min_lr": self.min_lr,
-        }
-        state_attrs = {
-            "_chief_worker_only": self._chief_worker_only,
-            "_keras_api_names": self._keras_api_names,
-            "_keras_api_names_v1": self._keras_api_names_v1,
-            "_supports_tf_logs": self._supports_tf_logs,
-            "wait": self.wait,
-            "cooldown_counter": self.cooldown_counter,
-            "best": self.best,
-            "params": self.params,
-            "validation_data": self.validation_data,
-        }
-
-        return pickle.dumps((kwargs, state_attrs))
-
-    @classmethod
-    def deserialize(cls, buffer: bytes) -> "SerializableReduceLROnPlateau":
-        kwargs, state_attrs = pickle.loads(buffer)
-        instance = cls(**kwargs)
-        for attr, val in state_attrs.items():
-            setattr(instance, attr, val)
-        return instance
+class SerializableReduceLROnPlateau(ReduceLROnPlateau, SerializableKerasObject):
+    pass
 
 
 @keras_export("keras.callbacks.SerializableTensorBoard")
-class SerializableTensorBoard(TensorBoard):
-    def serialize(self) -> bytes:
-        kwargs = {
-            "log_dir": self.log_dir,
-            "histogram_freq": self.histogram_freq,
-            "write_graph": self.write_graph,
-            "write_images": self.write_images,
-            "update_freq": self.update_freq,
-            "embeddings_freq": self.embeddings_freq,
-            "embeddings_metadata": self.embeddings_metadata,
-        }
-
-        all_state_attrs = self.__dict__.copy()
-        excepted_attrs = set(kwargs.keys()) | {"_writers", "model"}
-        for attr in excepted_attrs:
-            del all_state_attrs[attr]
-
-        return pickle.dumps((kwargs, all_state_attrs))
-
-    @classmethod
-    def deserialize(cls, buffer: bytes) -> "SerializableTensorBoard":
-        kwargs, state_attrs = pickle.loads(buffer)
-        instance = cls(**kwargs)
-        for attr, val in state_attrs.items():
-            setattr(instance, attr, val)
-        return instance
+class SerializableTensorBoard(TensorBoard, SerializableKerasObject):
+    pass
 
 
 @keras_export("keras.callbacks.SerializableCSVLogger")
-class SerializableCSVLogger(CSVLogger):
-    def serialize(self) -> bytes:
-        kwargs = {"filename": self.filename}
-
-        all_state_attrs = self.__dict__.copy()
-        # writer and csv_file are layzily initialized by object
-        # model is set before training, AFAIK
-        excepted_attrs = set(kwargs.keys()) | {"model", "writer", "csv_file"}
-        for attr in excepted_attrs:
-            del all_state_attrs[attr]
-
-        return pickle.dumps((kwargs, all_state_attrs))
-
-    @classmethod
-    def deserialize(cls, buffer: bytes) -> "SerializableCSVLogger":
-        kwargs, state_attrs = pickle.loads(buffer)
-        instance = cls(**kwargs)
-        for attr, val in state_attrs.items():
-            setattr(instance, attr, val)
-        return instance
+class SerializableCSVLogger(CSVLogger, SerializableKerasObject):
+    pass

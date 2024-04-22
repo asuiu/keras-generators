@@ -3,15 +3,16 @@
 
 from json import JSONEncoder
 
+import cloudpickle
 import numpy as np
 from pydantic import Extra
 
 
 class NumpyArrayEncoder(JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return JSONEncoder.default(self, obj)
+    def default(self, o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        return JSONEncoder.default(self, o)
 
 
 class ImmutableConfig:
@@ -22,3 +23,13 @@ class ImmutableConfig:
 
 class ArbitraryTypes:
     arbitrary_types_allowed = True
+
+
+class SerializableKerasObject:
+    def serialize(self) -> bytes:
+        pickled = cloudpickle.dumps(self)
+        return pickled
+
+    @classmethod
+    def deserialize(cls, buffer: bytes) -> "SerializableKerasObject":
+        return cloudpickle.loads(buffer)

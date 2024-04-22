@@ -7,18 +7,18 @@ from typing import List
 try:
     from pip._internal.network.session import PipSession
     from pip._internal.req import parse_requirements
-except ImportError:
-    logging.CRITICAL("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
-    raise ImportError("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
+except ImportError as exc:
+    logging.critical("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip")
+    raise ImportError("keras-generators requires pip>=20.0 in order to properly install dependencies. Consider upgrading pip") from exc
 from setuptools import find_packages
 
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 
 def get_requirements(requirements_file: Path) -> List[str]:
     reqs = parse_requirements(str(requirements_file), session=PipSession())
-    requirements = [str(req.requirement) for req in reqs if req.requirement is not None]
-    return requirements
+    requirements_lst = [str(req.requirement) for req in reqs if req.requirement is not None]
+    return requirements_lst
 
 
 ROOT = Path(__file__).resolve().parent
@@ -56,5 +56,5 @@ setup(
     license="Apache License 2.0",
     packages=find_packages(exclude=("*test*",)),
     setup_requires=[],
-    python_requires=">=3.7",
+    python_requires=">=3.10",
 )

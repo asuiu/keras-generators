@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="true" type="tests" factoryName="Unittests" singleton="false">
+    <module name="keras-generators" />
+    <option name="ENV_FILES" value="" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="TF_USE_LEGACY_KERAS" value="1" />
+      <env name="TF_ENABLE_ONEDNN_OPTS" value="0" />
+      <env name="CUDA_VISIBLE_DEVICES" value="&quot;-1&quot;" />
+    </envs>
+    <option name="SDK_HOME" value="$USER_HOME$/miniconda3/envs/keras-generators12/python.exe" />
+    <option name="SDK_NAME" value="keras-generators12" />
+    <option name="WORKING_DIRECTORY" value="" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="_new_pattern" value="&quot;&quot;" />
+    <option name="_new_additionalArguments" value="&quot;&quot;" />
+    <option name="_new_target" value="&quot;&quot;" />
+    <option name="_new_targetType" value="&quot;PATH&quot;" />
+    <method v="2" />
+  </configuration>
+</component>
