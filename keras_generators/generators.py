@@ -2,6 +2,7 @@
 Reason why not use tf.Dataset:
  - when scaling data, scaling factor aren't saved, so it's impossible to scale during inference in production
 """
+
 import json
 import math
 from abc import ABC, abstractmethod
@@ -9,9 +10,9 @@ from collections import defaultdict
 from typing import Collection, Dict, ForwardRef, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from keras.utils import data_utils
 from pydantic import PositiveInt, conint, validate_arguments
 from pydantic.dataclasses import dataclass
+from tensorflow.python.keras.utils import data_utils
 
 from .common import ArbitraryTypes, ImmutableConfig, NumpyArrayEncoder
 from .encoders import ChainedDataEncoder, CompoundDataEncoder, DataEncoder
