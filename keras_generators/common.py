@@ -3,7 +3,7 @@
 
 from json import JSONEncoder
 
-import cloudpickle
+import dill
 import numpy as np
 from pydantic import Extra
 
@@ -27,9 +27,9 @@ class ArbitraryTypes:
 
 class SerializableKerasObject:
     def serialize(self) -> bytes:
-        pickled = cloudpickle.dumps(self)
+        pickled = dill.dumps(self)
         return pickled
 
     @classmethod
     def deserialize(cls, buffer: bytes) -> "SerializableKerasObject":
-        return cloudpickle.loads(buffer)
+        return dill.loads(buffer)

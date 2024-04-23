@@ -150,8 +150,12 @@ unscaled_y_pred = res_ds.decode()[:]
 # Changelog
 
 All notable changes to this project will be documented in this file.
-## [1.4.1] - 2024-04-22
-v1.4.1:
+## [1.4.3] - 2024-04-23
+- fix callbacks to work on TF 2.16
+- added integration tests for callbacks.py module
+- using dill serializer instead of pickle for serialization of the Callbacks
+
+## [1.4.2] - 2024-04-22
 - Drops support <3.10 in setup.py
 - Upgrade ModelParams to use pydantic>=2.*
 - Proper serialization of Callbacks using cloudpickle + dependency on cloudpickle
@@ -159,6 +163,7 @@ v1.4.1:
 - Use legacy Keras (2.*) instead of the new 3.0 by explicitly importing tf_keras lib
 - Integration tests for Callback serialization
 
+## [1.4.1] - 2024-04-22 ( Removed)
 
 ## [1.4.0] - 2024-04-22
 ### Added

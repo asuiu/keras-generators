@@ -5,9 +5,11 @@ from json import JSONEncoder
 from pathlib import Path
 from typing import Optional
 
+import dill
 import numpy as np
 from tensorflow.python.util.tf_export import keras_export
 from tf_keras.callbacks import Callback, CSVLogger, ReduceLROnPlateau, TensorBoard
+from typing_extensions import Self, override
 
 from keras_generators.common import SerializableKerasObject
 
@@ -117,9 +119,63 @@ class SerializableReduceLROnPlateau(ReduceLROnPlateau, SerializableKerasObject):
 
 @keras_export("keras.callbacks.SerializableTensorBoard")
 class SerializableTensorBoard(TensorBoard, SerializableKerasObject):
-    pass
+    @override
+    def serialize(self) -> bytes:
+        kwargs = {
+            "log_dir": self.log_dir,
+            "histogram_freq": self.histogram_freq,
+            "write_graph": self.write_graph,
+            "write_images": self.write_images,
+            "write_steps_per_second": self.write_steps_per_second,
+            "update_freq": self.update_freq,
+            # "profile_batch" we ignore this parameter as it's not directly saved on the object
+            "embeddings_freq": self.embeddings_freq,
+            "embeddings_metadata": self.embeddings_metadata,
+        }
+        all_state_attrs = self.__dict__.copy()
+        excepted_attrs = set(kwargs.keys()) | {"_writers"}
+        for attr in excepted_attrs:
+            del all_state_attrs[attr]
+
+        return dill.dumps((kwargs, all_state_attrs))
+
+    @override
+    @classmethod
+    def deserialize(cls, buffer: bytes) -> Self:
+        kwargs, state_attrs = dill.loads(buffer)
+        instance = cls(**kwargs)
+        for attr, val in state_attrs.items():
+            setattr(instance, attr, val)
+        return instance
 
 
 @keras_export("keras.callbacks.SerializableCSVLogger")
 class SerializableCSVLogger(CSVLogger, SerializableKerasObject):
-    pass
+    def serialize(self) -> bytes:
+        """
+        self.sep = separator
+        self.filename = io_utils.path_to_string(filename)
+        self.append = append
+
+        :return:
+        """
+        kwargs = {
+            "separator": self.sep,
+            "filename": self.filename,
+            "append": self.append,
+        }
+        all_state_attrs = self.__dict__.copy()
+        excepted_attrs = {"sep", "filename", "append"} | {"writer", "csv_file"}
+        for attr in excepted_attrs:
+            del all_state_attrs[attr]
+
+        return dill.dumps((kwargs, all_state_attrs))
+
+    @override
+    @classmethod
+    def deserialize(cls, buffer: bytes) -> Self:
+        kwargs, state_attrs = dill.loads(buffer)
+        instance = cls(**kwargs)
+        for attr, val in state_attrs.items():
+            setattr(instance, attr, val)
+        return instance
