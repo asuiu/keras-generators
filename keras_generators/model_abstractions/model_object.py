@@ -8,9 +8,10 @@ from abc import ABC
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
+import keras.backend as K
 import tensorflow as tf
 from keras import Model
-from keras.callbacks import (
+from tf_keras.callbacks import (
     Callback,
     CSVLogger,
     EarlyStopping,
@@ -18,7 +19,6 @@ from keras.callbacks import (
     ModelCheckpoint,
     ReduceLROnPlateau,
 )
-import keras.backend as K
 from tsx import TS
 
 from ..callbacks import MetricCheckpoint
@@ -108,7 +108,7 @@ class ModelObject(ABC):
 
     @staticmethod
     def construct_model_dir(name: str, base_dir: Union[str, Path] = "model-data") -> Path:
-        model_save_name = f'{TS.now().as_file_ts}-{name}'
+        model_save_name = f"{TS.now().as_file_ts}-{name}"
         model_dir = (Path(base_dir).absolute()) / model_save_name
         return model_dir
 

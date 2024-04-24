@@ -150,6 +150,11 @@ unscaled_y_pred = res_ds.decode()[:]
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [1.4.4] - 2024-04-24
+- removed serialization of the model in the callbacks
+- Renames SerializableKerasObject -> SerializableCallback
+
 ## [1.4.3] - 2024-04-23
 - fix callbacks to work on TF 2.16
 - added integration tests for callbacks.py module

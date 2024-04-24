@@ -3,8 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase
 
-import numpy as np
-from tf_keras import Model, Sequential
+from tf_keras import Sequential
 from tf_keras.src.layers import Dense
 
 from keras_generators.callbacks import (
@@ -31,19 +30,6 @@ class TestSerializableKerasObject(TestCase):
         self.model.add(Dense(2, input_shape=(2,)))
         self.model.compile(optimizer="adam", loss="mse")
 
-    @staticmethod
-    def models_equal(m1: Model, m2: Model, tol=1e-5) -> bool:
-        weights1 = m1.get_weights()
-        weights2 = m2.get_weights()
-        for w1, w2 in zip(weights1, weights2):
-            if not np.allclose(w1, w2, atol=tol):
-                return False
-
-        json_eq = m1.to_json() == m2.to_json()
-        if not json_eq:
-            return False
-        return True
-
     def test_serialize_deserialize_EarlyStoppingAtMinLoss(self):
         # set up the callback
         loss_max_diff = 0.01
@@ -64,10 +50,9 @@ class TestSerializableKerasObject(TestCase):
         for k, v in callback.__dict__.items():
             if _is_function_object(v):
                 continue
-            deserialized_v = getattr(deserialized, k)
-            if isinstance(v, Model):
-                self.assertTrue(self.models_equal(v, deserialized_v))
+            if k in ("model",):
                 continue
+            deserialized_v = getattr(deserialized, k)
             self.assertEqual(v, deserialized_v)
 
         deserialized.on_epoch_begin(1)
@@ -95,10 +80,7 @@ class TestSerializableKerasObject(TestCase):
                 if _is_function_object(v):
                     continue
                 deserialized_v = getattr(deserialized, k)
-                if k in ("_f", "_je"):
-                    continue
-                if isinstance(v, Model):
-                    self.assertTrue(self.models_equal(v, deserialized_v))
+                if k in ("_f", "_je", "model"):
                     continue
                 self.assertEqual(v, deserialized_v, f"Failed on {k} with {v} != {deserialized_v}")
 
@@ -109,7 +91,6 @@ class TestSerializableKerasObject(TestCase):
             deserialized.on_train_end()
             callback.on_train_end()
             callback._f.close()
-        print()
 
     def test_serialize_deserialize_SerializableReduceLROnPlateau(self):
         # set up the callback
@@ -145,12 +126,12 @@ class TestSerializableKerasObject(TestCase):
         for k, v in callback.__dict__.items():
             if _is_function_object(v):
                 continue
-            deserialized_v = getattr(deserialized, k)
-            if isinstance(v, Model):
-                self.assertTrue(self.models_equal(v, deserialized_v))
+            if k in ("model",):
                 continue
+            deserialized_v = getattr(deserialized, k)
             self.assertEqual(v, deserialized_v)
 
+        deserialized.set_model(self.model)
         deserialized.on_epoch_begin(1)
         deserialized.on_batch_begin(1)
         deserialized.on_batch_end(1)
@@ -181,13 +162,12 @@ class TestSerializableKerasObject(TestCase):
         for k, v in callback.__dict__.items():
             if _is_function_object(v):
                 continue
-            if k in ("_writers",):
+            if k in ("_writers", "model"):
                 continue
             deserialized_v = getattr(deserialized, k)
-            if isinstance(v, Model):
-                self.assertTrue(self.models_equal(v, deserialized_v))
-                continue
             self.assertEqual(v, deserialized_v)
+
+        deserialized.set_model(self.model)
         deserialized.on_epoch_begin(1)
         deserialized.on_batch_begin(1)
         deserialized.on_batch_end(1)
@@ -212,12 +192,9 @@ class TestSerializableKerasObject(TestCase):
         for k, v in callback.__dict__.items():
             if _is_function_object(v):
                 continue
-            if k in ("writer", "csv_file"):
+            if k in ("writer", "csv_file", "model"):
                 continue
             deserialized_v = getattr(deserialized, k)
-            if isinstance(v, Model):
-                self.assertTrue(self.models_equal(v, deserialized_v))
-                continue
             self.assertEqual(v, deserialized_v)
 
         deserialized.on_train_begin()

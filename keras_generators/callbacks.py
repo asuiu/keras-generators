@@ -11,10 +11,10 @@ from tensorflow.python.util.tf_export import keras_export
 from tf_keras.callbacks import Callback, CSVLogger, ReduceLROnPlateau, TensorBoard
 from typing_extensions import Self, override
 
-from keras_generators.common import SerializableKerasObject
+from keras_generators.common import SerializableCallback
 
 
-class EarlyStoppingAtMinLoss(Callback, SerializableKerasObject):
+class EarlyStoppingAtMinLoss(Callback, SerializableCallback):
     """Stop training when the loss is at its min, i.e. the loss stops decreasing.
 
     Arguments:
@@ -82,7 +82,7 @@ class EarlyStoppingAtMinLoss(Callback, SerializableKerasObject):
             logging.warning("Epoch %05d: early stopping", self.stopped_epoch + 1)
 
 
-class MetricCheckpoint(Callback, SerializableKerasObject):
+class MetricCheckpoint(Callback, SerializableCallback):
     FNAME = "metrics.jsonl"
 
     def on_train_begin(self, *_args, **_kwargs):
@@ -113,12 +113,12 @@ class MetricCheckpoint(Callback, SerializableKerasObject):
 
 
 @keras_export("keras.callbacks.SerializableReduceLROnPlateau")
-class SerializableReduceLROnPlateau(ReduceLROnPlateau, SerializableKerasObject):
+class SerializableReduceLROnPlateau(ReduceLROnPlateau, SerializableCallback):
     pass
 
 
 @keras_export("keras.callbacks.SerializableTensorBoard")
-class SerializableTensorBoard(TensorBoard, SerializableKerasObject):
+class SerializableTensorBoard(TensorBoard, SerializableCallback):
     @override
     def serialize(self) -> bytes:
         kwargs = {
@@ -133,7 +133,7 @@ class SerializableTensorBoard(TensorBoard, SerializableKerasObject):
             "embeddings_metadata": self.embeddings_metadata,
         }
         all_state_attrs = self.__dict__.copy()
-        excepted_attrs = set(kwargs.keys()) | {"_writers"}
+        excepted_attrs = set(kwargs.keys()) | {"_writers", "model"}
         for attr in excepted_attrs:
             del all_state_attrs[attr]
 
@@ -150,7 +150,7 @@ class SerializableTensorBoard(TensorBoard, SerializableKerasObject):
 
 
 @keras_export("keras.callbacks.SerializableCSVLogger")
-class SerializableCSVLogger(CSVLogger, SerializableKerasObject):
+class SerializableCSVLogger(CSVLogger, SerializableCallback):
     def serialize(self) -> bytes:
         """
         self.sep = separator
@@ -165,7 +165,7 @@ class SerializableCSVLogger(CSVLogger, SerializableKerasObject):
             "append": self.append,
         }
         all_state_attrs = self.__dict__.copy()
-        excepted_attrs = {"sep", "filename", "append"} | {"writer", "csv_file"}
+        excepted_attrs = {"sep", "filename", "append"} | {"writer", "csv_file", "model"}
         for attr in excepted_attrs:
             del all_state_attrs[attr]
 
