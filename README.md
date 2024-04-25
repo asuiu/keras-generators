@@ -151,6 +151,9 @@ unscaled_y_pred = res_ds.decode()[:]
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.5] - 2024-04-25
+- explicit use of tf_keras in model_object.py 
+
 ## [1.4.4] - 2024-04-24
 - removed serialization of the model in the callbacks
 - Renames SerializableKerasObject -> SerializableCallback

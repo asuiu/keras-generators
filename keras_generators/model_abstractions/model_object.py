@@ -8,9 +8,9 @@ from abc import ABC
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-import keras.backend as K
 import tensorflow as tf
-from keras import Model
+import tf_keras as keras
+import tf_keras.backend as K
 from tf_keras.callbacks import (
     Callback,
     CSVLogger,
@@ -31,7 +31,7 @@ class ModelObject(ABC):
     def __init__(
         self,
         mp: ModelParams,
-        model: Model,
+        model: keras.Model,
         encoders: Dict[str, List[DataEncoder]],
         state_autoclear: int = 128,
     ) -> None:
@@ -204,5 +204,5 @@ class SimpleModelObject(ModelObject):
         with tf.device(device):
             custom_object_classes = [model_params_cls] + (custom_classes or [])
             custom_objects = {cls.__name__: cls for cls in custom_object_classes}
-            model = tf.keras.models.load_model(hdf5_path, custom_objects=custom_objects)
+            model = keras.models.load_model(hdf5_path, custom_objects=custom_objects)
         return cls(mp=mp, model=model, encoders=encoders)
